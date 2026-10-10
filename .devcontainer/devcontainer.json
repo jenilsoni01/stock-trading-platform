@@ -1,8 +1,9 @@
 {
   "name": "Stock Trading Platform",
-  "image": "mcr.microsoft.com/devcontainers/universal:2",
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu",
+  "privileged": true,
   "features": {
-    "ghcr.io/devcontainers/features/docker-in-docker:2": {
+    "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {
       "version": "latest",
       "enableDockerBuildKit": true
     }
@@ -60,11 +61,7 @@
     "vscode": {
       "extensions": [
         "ms-azuretools.vscode-docker",
-        "humao.rest-client",
-        "vscjava.vscode-java-pack",
-        "golang.go",
-        "ms-python.python",
-        "ms-vscode.cpptools"
+        "humao.rest-client"
       ]
     }
   },
