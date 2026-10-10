@@ -1,0 +1,52 @@
+syntax = "proto3";
+
+package marketdata;
+
+option java_multiple_files = true;
+option java_package = "com.stp.contracts.grpc.marketdata";
+option go_package = "github.com/stock-trading-platform/contracts/grpc/marketdata";
+
+// QuoteService provides real-time quote lookup for order execution.
+// Used by Order Service (C++) to get current market prices via gRPC.
+service QuoteService {
+  // GetQuote returns the current simulated price for a given stock symbol.
+  // Used during order execution to determine execution price.
+  rpc GetQuote(QuoteRequest) returns (QuoteResponse);
+
+  // GetQuotes returns quotes for multiple symbols in a single call.
+  rpc GetQuotes(MultiQuoteRequest) returns (MultiQuoteResponse);
+}
+
+message QuoteRequest {
+  // Stock ticker symbol (e.g., "RELIANCE", "TCS", "INFY")
+  string symbol = 1;
+}
+
+message QuoteResponse {
+  // Stock ticker symbol
+  string symbol = 1;
+  
+  // Current price in paise (integer, 1 INR = 100 paise)
+  // Example: ₹2,450.00 = 245000
+  int64 price_paise = 2;
+  
+  // Previous price in paise for change calculation
+  int64 previous_price_paise = 3;
+  
+  // ISO 8601 UTC timestamp of the quote
+  string timestamp = 4;
+  
+  // Whether the market is currently active (simulation is running)
+  bool market_active = 5;
+  
+  // Volume traded in simulation (informational)
+  int64 volume = 6;
+}
+
+message MultiQuoteRequest {
+  repeated string symbols = 1;
+}
+
+message MultiQuoteResponse {
+  repeated QuoteResponse quotes = 1;
+}

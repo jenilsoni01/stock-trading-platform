@@ -1,0 +1,78 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: api-gateway
+  cloud:
+    gateway:
+      globalcors:
+        cors-configurations:
+          '[/**]':
+            allowedOrigins:
+              - "http://localhost:3000"
+              - "http://localhost:3001"
+              - "http://localhost:5173"
+              - "http://127.0.0.1:3000"
+              - "http://127.0.0.1:3001"
+              - "http://127.0.0.1:5173"
+            allowedMethods:
+              - GET
+              - POST
+              - PUT
+              - PATCH
+              - DELETE
+              - OPTIONS
+            allowedHeaders: "*"
+            allowCredentials: true
+            maxAge: 3600
+
+      routes:
+        # 1. Identity & Auth & Wallet Routes
+        - id: auth-service
+          uri: ${IDENTITY_SERVICE_URL:http://identity-wallet-service:8081}
+          predicates:
+            - Path=/api/v1/auth/**, /api/v1/users/**, /api/v1/wallet/**
+
+        # 2. Market Data Service Routes
+        - id: market-data-service
+          uri: ${MARKET_DATA_SERVICE_URL:http://market-data-service:8082}
+          predicates:
+            - Path=/api/v1/stocks/**
+
+        # 3. Order Service Routes
+        - id: order-service
+          uri: ${ORDER_SERVICE_URL:http://order-service:8083}
+          predicates:
+            - Path=/api/v1/orders/**, /api/v1/trades/**
+
+        # 4. Portfolio Service Routes
+        - id: portfolio-service
+          uri: ${PORTFOLIO_SERVICE_URL:http://portfolio-service:8084}
+          predicates:
+            - Path=/api/v1/portfolio/**
+
+        # 5. Notification Service Routes
+        - id: notification-service
+          uri: ${NOTIFICATION_SERVICE_URL:http://notification-service:8085}
+          predicates:
+            - Path=/api/v1/notifications/**
+
+eureka:
+  client:
+    service-url:
+      defaultZone: ${EUREKA_SERVER_URL:http://eureka-server:8761/eureka/}
+    register-with-eureka: false
+    fetch-registry: false
+
+jwt:
+  secret: ${JWT_SECRET:supersecretjwtkeywithsufficientlengthofatleast256bitsforstpsecurity}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: always

@@ -1,0 +1,168 @@
+# ============================================
+# Microservices Application Docker Compose
+# ============================================
+# Usage: docker compose -f deploy/compose/compose.infra.yml -f deploy/compose/compose.apps.yml up -d
+
+services:
+  # === Discovery Service (Eureka) ===
+  eureka-server:
+    build:
+      context: ../../discovery
+      dockerfile: Dockerfile
+    container_name: stp-discovery
+    ports:
+      - "8761:8761"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+    restart: unless-stopped
+    networks:
+      - stp-network
+
+  # === Identity & Wallet Service ===
+  identity-wallet-service:
+    build:
+      context: ../../apps/identity-wallet-service
+      dockerfile: Dockerfile
+    container_name: stp-identity-wallet
+    ports:
+      - "8081:8081"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/identity_wallet_db
+      - SPRING_DATASOURCE_USERNAME=iw_service
+      - SPRING_DATASOURCE_PASSWORD=dev_postgres_pass
+      - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://eureka-server:8761/eureka/
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - stp-network
+
+  # === Market Data Service ===
+  market-data-service:
+    build:
+      context: ../../apps/market-data-service
+      dockerfile: Dockerfile
+    container_name: stp-market-data
+    ports:
+      - "8082:8082"
+      - "50051:50051"
+    environment:
+      - PORT=8082
+      - GRPC_PORT=50051
+      - MONGODB_URI=mongodb://md_service:dev_mongo_pass@mongodb:27017/market_data_db?authSource=admin
+      - SIMULATOR_INTERVAL_SECONDS=30
+      - SIMULATOR_MAX_CHANGE_PERCENT=2.0
+      - SIMULATOR_SEED=42
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - stp-network
+
+  # === Order Service ===
+  order-service:
+    build:
+      context: ../../apps/order-service
+      dockerfile: Dockerfile
+    container_name: stp-order-service
+    ports:
+      - "8083:8083"
+    environment:
+      - DB_HOST=mysql
+      - DB_USER=order_service
+      - DB_PASSWORD=dev_mysql_pass
+      - DB_NAME=order_service_db
+      - MARKET_DATA_URL=http://market-data-service:8082
+      - WALLET_SERVICE_URL=http://identity-wallet-service:8081
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+    depends_on:
+      mysql:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - stp-network
+
+  # === Portfolio Service ===
+  portfolio-service:
+    build:
+      context: ../../apps/portfolio-service
+      dockerfile: Dockerfile
+    container_name: stp-portfolio-service
+    ports:
+      - "8084:8084"
+    environment:
+      - PORT=8084
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=dev_redis_pass
+      - MARKET_DATA_URL=http://market-data-service:8082
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - stp-network
+
+  # === Notification Service ===
+  notification-service:
+    build:
+      context: ../../apps/notification-service
+      dockerfile: Dockerfile
+    container_name: stp-notification-service
+    ports:
+      - "8085:8085"
+    environment:
+      - PORT=8085
+      - FIRESTORE_EMULATOR_HOST=firestore-emulator:8088
+      - FIRESTORE_PROJECT_ID=stp-local
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+    depends_on:
+      firestore-emulator:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - stp-network
+
+  # === API Gateway ===
+  api-gateway:
+    build:
+      context: ../../gateway
+      dockerfile: Dockerfile
+    container_name: stp-gateway
+    ports:
+      - "8080:8080"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - EUREKA_SERVER_URL=http://eureka-server:8761/eureka/
+      - IDENTITY_SERVICE_URL=http://identity-wallet-service:8081
+      - MARKET_DATA_SERVICE_URL=http://market-data-service:8082
+      - ORDER_SERVICE_URL=http://order-service:8083
+      - PORTFOLIO_SERVICE_URL=http://portfolio-service:8084
+      - NOTIFICATION_SERVICE_URL=http://notification-service:8085
+    restart: unless-stopped
+    networks:
+      - stp-network
+  # === Web Client ===
+  web-client:
+    build:
+      context: ../../apps/web-client
+      dockerfile: Dockerfile
+    container_name: stp-web-client
+    ports:
+      - "3001:80"
+    depends_on:
+      - api-gateway
+    restart: unless-stopped
+    networks:
+      - stp-network
+
+networks:
+  stp-network:
+    name: stp-network
+    external: true
+

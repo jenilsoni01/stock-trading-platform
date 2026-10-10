@@ -1,0 +1,72 @@
+{
+  "name": "Stock Trading Platform",
+  "image": "mcr.microsoft.com/devcontainers/universal:2",
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {
+      "version": "latest",
+      "enableDockerBuildKit": true
+    }
+  },
+  "forwardPorts": [
+    3000,
+    8080,
+    8081,
+    8082,
+    8083,
+    8084,
+    8085,
+    8761,
+    9092,
+    27017,
+    5432,
+    3306,
+    6379
+  ],
+  "portsAttributes": {
+    "3000": {
+      "label": "Web Client UI",
+      "onAutoForward": "openBrowser"
+    },
+    "8080": {
+      "label": "API Gateway",
+      "onAutoForward": "notify"
+    },
+    "8081": {
+      "label": "Identity & Wallet Service",
+      "onAutoForward": "silent"
+    },
+    "8082": {
+      "label": "Market Data Service",
+      "onAutoForward": "silent"
+    },
+    "8083": {
+      "label": "Order Service",
+      "onAutoForward": "silent"
+    },
+    "8084": {
+      "label": "Portfolio Service",
+      "onAutoForward": "silent"
+    },
+    "8085": {
+      "label": "Notification Service",
+      "onAutoForward": "silent"
+    },
+    "8761": {
+      "label": "Eureka Service Registry",
+      "onAutoForward": "silent"
+    }
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-azuretools.vscode-docker",
+        "humao.rest-client",
+        "vscjava.vscode-java-pack",
+        "golang.go",
+        "ms-python.python",
+        "ms-vscode.cpptools"
+      ]
+    }
+  },
+  "postCreateCommand": "cp -n .env.example .env 2>/dev/null || true"
+}

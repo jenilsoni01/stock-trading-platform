@@ -1,0 +1,22 @@
+{
+  "listeners": [
+    {
+      "address": "0.0.0.0",
+      "port": 8083,
+      "https": false
+    }
+  ],
+  "db_clients": [],
+  "app": {
+    "number_of_threads": 4,
+    "enable_server_header": false,
+    "enable_date_header": true,
+    "max_connections": 10000,
+    "max_connections_per_ip": 0,
+    "log_level": "INFO",
+    "market_data_url": "http://market-data-service:8082",
+    "wallet_service_url": "http://identity-wallet-service:8081",
+    "kafka_brokers": "kafka:29092",
+    "outbox_poll_interval_ms": 2000
+  }
+}

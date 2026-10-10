@@ -1,0 +1,9 @@
+# ============================================
+# Root Docker Compose - Stock Trading Platform
+# Runs complete distributed microservices system
+# ============================================
+# Usage: docker compose up --build -d
+
+include:
+  - path: deploy/compose/compose.infra.yml
+  - path: deploy/compose/compose.apps.yml

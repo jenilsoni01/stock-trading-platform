@@ -1,0 +1,140 @@
+# ============================================
+# Stock Trading Platform - Root .gitignore
+# ============================================
+
+# === Environment & Secrets ===
+.env
+.env.local
+.env.*.local
+*.env.local
+!.env.example
+!.env.local.example
+
+# Private keys, certificates, credentials
+*.pem
+*.key
+*.cert
+*.crt
+*.pfx
+*.p12
+
+# === Java / Spring Boot & Maven / Gradle ===
+*.class
+*.jar
+*.war
+*.ear
+target/
+build/
+out/
+.gradle/
+*.iml
+*.iws
+*.ipr
+
+# Ensure wrappers are committed so team members without standalone Maven/Gradle can build
+!gradle/wrapper/gradle-wrapper.jar
+!gradle/wrapper/gradle-wrapper.properties
+!.mvn/wrapper/maven-wrapper.jar
+!.mvn/wrapper/maven-wrapper.properties
+
+# === Go ===
+apps/market-data-service/market-data-service
+apps/market-data-service/market-data-service.exe
+vendor/
+*.test
+*.prof
+
+# === C++ / Drogon / CMake ===
+*.o
+*.obj
+*.exe
+*.out
+*.a
+*.lib
+*.so
+*.dylib
+*.dll
+apps/order-service/build/
+apps/order-service/cmake-build-*/
+CMakeUserPresets.json
+compile_commands.json
+.cache/
+
+# === Python ===
+.venv/
+venv/
+env/
+ENV/
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+*.egg
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+*.coverage.*
+
+# === Node.js ===
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+.npm
+.pnpm-store/
+.yarn/cache/
+
+# === React / Web Client ===
+apps/web-client/build/
+apps/web-client/dist/
+apps/web-client/.next/
+
+# === IDE & Editors ===
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# === OS & Filesystem Metadata ===
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+desktop.ini
+ehthumbs.db
+
+# === Docker & Local Overrides ===
+docker-compose.override.yml
+
+# === Kubernetes ===
+deploy/kubernetes/**/secrets.yaml
+!deploy/kubernetes/**/secrets.example.yaml
+
+# === Logs ===
+*.log
+logs/
+
+# === Database files & In-Memory Dumps ===
+*.db
+*.sqlite
+*.sqlite3
+*.rdb
+data/
+
+# === Generated protobuf ===
+# Keep .proto files, ignore generated code
+contracts/grpc/gen/
+
+# === Temporary & Scratch files ===
+scratch/
+tmp/
+temp/
+*.tmp
+*.bak
