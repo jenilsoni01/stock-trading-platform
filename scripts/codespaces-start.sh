@@ -21,7 +21,7 @@ sleep 15
 
 # 3. Build and Start Microservices
 echo "🔨 Building and Starting All 5 Application Services..."
-docker compose -f deploy/compose/compose.apps.yml up -d --build
+docker compose -f deploy/compose/compose.infra.yml -f deploy/compose/compose.apps.yml up -d --build
 
 echo ""
 echo "=========================================================="
