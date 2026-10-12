@@ -12,6 +12,8 @@ A robust, polyglot **paper-trading microservices platform** built for university
 
 > ⚠️ **Academic Simulation Notice**: This system is strictly a simulated paper-trading platform. It never connects to real brokerage accounts, places real orders, or handles real money.
 
+> 📖 **Feature Breakdown & Verification Guide**: See [docs/FEATURES_AND_TESTING_GUIDE.md](docs/FEATURES_AND_TESTING_GUIDE.md) for the complete list of all features and step-by-step verification instructions via Web UI and REST APIs.
+
 ---
 
 ## 👥 Service Ownership & Team Structure
