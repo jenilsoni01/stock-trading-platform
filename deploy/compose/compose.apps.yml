@@ -154,6 +154,7 @@ services:
       dockerfile: Dockerfile
     container_name: stp-web-client
     ports:
+      - "3000:80"
       - "3001:80"
     depends_on:
       - api-gateway
