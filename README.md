@@ -27,7 +27,7 @@ A robust, polyglot **paper-trading microservices platform** built for university
 | 5 | **Krish Chothani** | 23BCE151 | **Notification Service** | Node.js 20 / Express (ESM) | Firestore Emulator | `8085` | Windows |
 | - | Shared / Jenil | - | **API Gateway** | Java 17 / Spring Cloud Gateway (**Maven**) | Stateless / JWT | `8080` | Windows |
 | - | Shared | - | **Eureka Discovery** | Spring Cloud Netflix Eureka (**Maven**) | In-Memory Registry | `8761` | Windows |
-| - | Shared | - | **Web Client Terminal** | React 18 / Vite / Dark Theme | Browser SPA | `3001` | Multi-OS |
+| - | Shared | - | **Web Client Terminal** | React 18 / Vite / Dark Theme | Browser SPA | `3000` | Multi-OS |
 
 ---
 
@@ -35,7 +35,7 @@ A robust, polyglot **paper-trading microservices platform** built for university
 
 ```mermaid
 flowchart TD
-    Client["🌐 Web Client (React)<br/>http://localhost:3001"]
+    Client["🌐 Web Client (React)<br/>http://localhost:3000"]
     
     subgraph GatewayLayer ["API Gateway & Security Boundary"]
         Gateway["🚪 API Gateway (Spring Cloud Gateway)<br/>http://localhost:8080<br/>• JWT Validation • Rate Limiting • CORS • Correlation IDs"]
