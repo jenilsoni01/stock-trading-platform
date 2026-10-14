@@ -1,4 +1,4 @@
-const API_BASE = 'http://localhost:8080';
+const API_BASE = '';
 
 export function getAuthToken() {
   return localStorage.getItem('stp_jwt_token');
