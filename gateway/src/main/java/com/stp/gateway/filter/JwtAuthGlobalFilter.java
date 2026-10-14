@@ -28,7 +28,7 @@ public class JwtAuthGlobalFilter implements GlobalFilter, Ordered {
 
     private static final Logger log = LoggerFactory.getLogger(JwtAuthGlobalFilter.class);
 
-    @Value("${jwt.secret:supersecretjwtkeywithsufficientlengthofatleast256bitsforstpsecurity}")
+    @Value("${jwt.secret:dev-jwt-secret-change-me-in-production-this-must-be-at-least-256-bits-long-for-hs256}")
     private String jwtSecret;
 
     private static final List<String> PUBLIC_PATH_PREFIXES = List.of(

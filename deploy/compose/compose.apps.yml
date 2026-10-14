@@ -33,6 +33,7 @@ services:
       - SPRING_DATASOURCE_PASSWORD=dev_postgres_pass
       - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://eureka-server:8761/eureka/
       - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+      - JWT_SECRET=${JWT_SECRET:-dev-jwt-secret-change-me-in-production-this-must-be-at-least-256-bits-long-for-hs256}
     depends_on:
       postgres:
         condition: service_healthy
@@ -101,6 +102,7 @@ services:
       - REDIS_PASSWORD=dev_redis_pass
       - MARKET_DATA_URL=http://market-data-service:8082
       - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+      - JWT_SECRET=${JWT_SECRET:-dev-jwt-secret-change-me-in-production-this-must-be-at-least-256-bits-long-for-hs256}
     depends_on:
       redis:
         condition: service_healthy
@@ -121,6 +123,7 @@ services:
       - FIRESTORE_EMULATOR_HOST=firestore-emulator:8088
       - FIRESTORE_PROJECT_ID=stp-local
       - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+      - JWT_SECRET=${JWT_SECRET:-dev-jwt-secret-change-me-in-production-this-must-be-at-least-256-bits-long-for-hs256}
     depends_on:
       firestore-emulator:
         condition: service_healthy
@@ -144,6 +147,7 @@ services:
       - ORDER_SERVICE_URL=http://order-service:8083
       - PORTFOLIO_SERVICE_URL=http://portfolio-service:8084
       - NOTIFICATION_SERVICE_URL=http://notification-service:8085
+      - JWT_SECRET=${JWT_SECRET:-dev-jwt-secret-change-me-in-production-this-must-be-at-least-256-bits-long-for-hs256}
     restart: unless-stopped
     networks:
       - stp-network
