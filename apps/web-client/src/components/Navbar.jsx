@@ -12,7 +12,8 @@ import {
   UserPlus, 
   Layers, 
   PieChart, 
-  ListOrdered 
+  ListOrdered,
+  BookOpen
 } from 'lucide-react';
 
 export function Navbar({ activeTab, setActiveTab, onOpenNotifications, onOpenSystemStatus }) {
@@ -125,6 +126,14 @@ export function Navbar({ activeTab, setActiveTab, onOpenNotifications, onOpenSys
             style={{ padding: '8px 14px', fontSize: '13px' }}
           >
             <Wallet size={16} /> Wallet
+          </button>
+
+          <button
+            onClick={() => setActiveTab('guide')}
+            className={`btn ${activeTab === 'guide' ? 'btn-primary' : 'btn-secondary'}`}
+            style={{ padding: '8px 14px', fontSize: '13px', background: activeTab === 'guide' ? 'linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%)' : undefined }}
+          >
+            <BookOpen size={16} /> Trading Guide
           </button>
         </div>
       </div>

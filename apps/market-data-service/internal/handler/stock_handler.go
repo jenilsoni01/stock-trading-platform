@@ -88,3 +88,23 @@ func (h *StockHandler) GetPriceHistory(c *gin.Context) {
 		"count":   len(history),
 	})
 }
+
+// SyncLivePrices triggers a real-world market quote sync from Yahoo Finance
+// POST /api/v1/stocks/sync-live
+func (h *StockHandler) SyncLivePrices(c *gin.Context) {
+	count, err := h.marketService.SyncLiveQuotes(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":   "Sync Failed",
+			"message": err.Error(),
+		})
+		return
+	}
+
+	stocks, _ := h.marketService.ListStocks(c.Request.Context())
+	c.JSON(http.StatusOK, gin.H{
+		"message":      "Live market data successfully synchronized",
+		"updatedCount": count,
+		"stocks":       stocks,
+	})
+}

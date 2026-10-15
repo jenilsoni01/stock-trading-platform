@@ -53,7 +53,8 @@ export function OrderModal({ stock, initialSide = 'BUY', onClose, onOrderComplet
     setSubmitting(true);
 
     try {
-      const idempotencyKey = `ord-${user.userId.slice(0, 8)}-${Date.now()}`;
+      const userId = user?.id || user?.userId || 'trader';
+      const idempotencyKey = `ord-${String(userId).slice(0, 8)}-${Date.now()}`;
       const payload = {
         symbol: stock.symbol,
         side: side,
@@ -153,7 +154,7 @@ export function OrderModal({ stock, initialSide = 'BUY', onClose, onOrderComplet
             }}>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ color: 'var(--text-dim)' }}>Order ID:</span>
-                <span className="mono">{result.order?.orderId?.slice(0, 18)}...</span>
+                <span className="mono">{String(result.order?.orderId || result.orderId || 'CONFIRMED').slice(0, 18)}...</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ color: 'var(--text-dim)' }}>Trade Price:</span>

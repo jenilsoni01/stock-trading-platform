@@ -355,7 +355,150 @@ db.stocks.insertMany([
     isActive: true,
     createdAt: new Date(),
     updatedAt: new Date()
+  },
+  {
+    symbol: "AAPL",
+    name: "Apple Inc.",
+    sector: "US Tech",
+    market: "US",
+    currentPricePaise: NumberLong(2885000),
+    previousPricePaise: NumberLong(2872000),
+    dayHighPaise: NumberLong(2920000),
+    dayLowPaise: NumberLong(2850000),
+    volume: NumberLong(58000000),
+    isActive: true,
+    createdAt: new Date(),
+    updatedAt: new Date()
+  },
+  {
+    symbol: "MSFT",
+    name: "Microsoft Corporation",
+    sector: "US Tech",
+    market: "US",
+    currentPricePaise: NumberLong(3486000),
+    previousPricePaise: NumberLong(3470000),
+    dayHighPaise: NumberLong(3510000),
+    dayLowPaise: NumberLong(3450000),
+    volume: NumberLong(22000000),
+    isActive: true,
+    createdAt: new Date(),
+    updatedAt: new Date()
+  },
+  {
+    symbol: "NVDA",
+    name: "NVIDIA Corporation",
+    sector: "US Tech",
+    market: "US",
+    currentPricePaise: NumberLong(1134000),
+    previousPricePaise: NumberLong(1115000),
+    dayHighPaise: NumberLong(1150000),
+    dayLowPaise: NumberLong(1105000),
+    volume: NumberLong(84000000),
+    isActive: true,
+    createdAt: new Date(),
+    updatedAt: new Date()
+  },
+  {
+    symbol: "AMZN",
+    name: "Amazon.com Inc.",
+    sector: "US Tech",
+    market: "US",
+    currentPricePaise: NumberLong(1554000),
+    previousPricePaise: NumberLong(1540000),
+    dayHighPaise: NumberLong(1570000),
+    dayLowPaise: NumberLong(1530000),
+    volume: NumberLong(32000000),
+    isActive: true,
+    createdAt: new Date(),
+    updatedAt: new Date()
+  },
+  {
+    symbol: "GOOGL",
+    name: "Alphabet Inc. (Google)",
+    sector: "US Tech",
+    market: "US",
+    currentPricePaise: NumberLong(1386000),
+    previousPricePaise: NumberLong(1375000),
+    dayHighPaise: NumberLong(1400000),
+    dayLowPaise: NumberLong(1365000),
+    volume: NumberLong(24000000),
+    isActive: true,
+    createdAt: new Date(),
+    updatedAt: new Date()
+  },
+  {
+    symbol: "META",
+    name: "Meta Platforms Inc.",
+    sector: "US Tech",
+    market: "US",
+    currentPricePaise: NumberLong(4872000),
+    previousPricePaise: NumberLong(4830000),
+    dayHighPaise: NumberLong(4910000),
+    dayLowPaise: NumberLong(4800000),
+    volume: NumberLong(16000000),
+    isActive: true,
+    createdAt: new Date(),
+    updatedAt: new Date()
+  },
+  {
+    symbol: "TSLA",
+    name: "Tesla Inc.",
+    sector: "US Auto & Tech",
+    market: "US",
+    currentPricePaise: NumberLong(1848000),
+    previousPricePaise: NumberLong(1820000),
+    dayHighPaise: NumberLong(1880000),
+    dayLowPaise: NumberLong(1800000),
+    volume: NumberLong(45000000),
+    isActive: true,
+    createdAt: new Date(),
+    updatedAt: new Date()
+  },
+  {
+    symbol: "JPM",
+    name: "JPMorgan Chase & Co.",
+    sector: "US Financials",
+    market: "US",
+    currentPricePaise: NumberLong(1806000),
+    previousPricePaise: NumberLong(1795000),
+    dayHighPaise: NumberLong(1820000),
+    dayLowPaise: NumberLong(1785000),
+    volume: NumberLong(12000000),
+    isActive: true,
+    createdAt: new Date(),
+    updatedAt: new Date()
+  },
+  {
+    symbol: "V",
+    name: "Visa Inc.",
+    sector: "US Financials",
+    market: "US",
+    currentPricePaise: NumberLong(2352000),
+    previousPricePaise: NumberLong(2340000),
+    dayHighPaise: NumberLong(2370000),
+    dayLowPaise: NumberLong(2330000),
+    volume: NumberLong(9000000),
+    isActive: true,
+    createdAt: new Date(),
+    updatedAt: new Date()
+  },
+  {
+    symbol: "AMD",
+    name: "Advanced Micro Devices",
+    sector: "US Tech",
+    market: "US",
+    currentPricePaise: NumberLong(1310000),
+    previousPricePaise: NumberLong(1295000),
+    dayHighPaise: NumberLong(1330000),
+    dayLowPaise: NumberLong(1285000),
+    volume: NumberLong(38000000),
+    isActive: true,
+    createdAt: new Date(),
+    updatedAt: new Date()
   }
 ]);
 
-print("MongoDB initialized with 25 seed stocks");
+// Update any existing stocks without market field
+db.stocks.updateMany({ market: { $exists: false } }, { $set: { market: "NSE" } });
+
+print("MongoDB initialized with 35 Indian & US seed stocks");

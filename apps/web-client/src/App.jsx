@@ -9,6 +9,7 @@ import { OrderModal } from './components/OrderModal';
 import { NotificationDrawer } from './components/NotificationDrawer';
 import { SystemStatusModal } from './components/SystemStatusModal';
 import { AuthModal } from './components/AuthModal';
+import { TradingGuideView } from './components/TradingGuideView';
 
 function AppContent() {
   const [activeTab, setActiveTab] = useState('market');
@@ -42,6 +43,10 @@ function AppContent() {
 
         {activeTab === 'wallet' && (
           <WalletLedgerView />
+        )}
+
+        {activeTab === 'guide' && (
+          <TradingGuideView onSelectStockForOrder={(data) => setOrderModalData(data)} />
         )}
       </main>
 

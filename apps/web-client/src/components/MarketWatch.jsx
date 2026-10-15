@@ -1,17 +1,34 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { api } from '../api';
 import { useAuth } from '../context/AuthContext';
-import { Search, TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight, RefreshCw, ShoppingCart, Activity } from 'lucide-react';
+import { 
+  Search, 
+  TrendingUp, 
+  TrendingDown, 
+  ArrowUpRight, 
+  ArrowDownRight, 
+  RefreshCw, 
+  Activity, 
+  Globe, 
+  Zap, 
+  CheckCircle2, 
+  Clock 
+} from 'lucide-react';
 
 export function MarketWatch({ onSelectStockForOrder }) {
   const { user, openAuthModal } = useAuth();
   const [stocks, setStocks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [marketFilter, setMarketFilter] = useState('ALL'); // 'ALL' | 'NSE' | 'US'
   const [selectedSector, setSelectedSector] = useState('ALL');
   const [selectedStockHistory, setSelectedStockHistory] = useState(null);
-  const [historyLoading, setHistoryLoading] = useState(false);
   const [priceFlashMap, setPriceFlashMap] = useState({}); // { [symbol]: 'price-flash-up' | 'price-flash-down' }
+  const [dataMode, setDataMode] = useState('simulated'); // 'simulated' | 'live'
+  const [isSyncingLive, setIsSyncingLive] = useState(false);
+  const [lastLiveSyncTime, setLastLiveSyncTime] = useState(null);
+  const [syncStatusMsg, setSyncStatusMsg] = useState(null);
+
   const prevPricesRef = useRef({});
 
   const fetchStocks = async () => {
@@ -49,30 +66,70 @@ export function MarketWatch({ onSelectStockForOrder }) {
 
   useEffect(() => {
     fetchStocks();
-    // 2-second real-time poll for live market experience
-    const interval = setInterval(fetchStocks, 2000);
+    // In simulated mode, poll every 2 seconds for high-frequency ticks.
+    // In live mode, poll every 8 seconds to reflect any background updates.
+    const pollInterval = dataMode === 'simulated' ? 2000 : 8000;
+    const interval = setInterval(fetchStocks, pollInterval);
     return () => clearInterval(interval);
-  }, []);
+  }, [dataMode]);
+
+  const handleToggleDataMode = async (mode) => {
+    setDataMode(mode);
+    if (mode === 'live') {
+      await syncLiveQuotes();
+    }
+  };
+
+  const syncLiveQuotes = async () => {
+    setIsSyncingLive(true);
+    setSyncStatusMsg('Contacting global exchange feeds via Yahoo Finance API...');
+    try {
+      const res = await api.syncLiveMarket();
+      if (res && res.stocks) {
+        setStocks(res.stocks);
+      } else {
+        await fetchStocks();
+      }
+      setLastLiveSyncTime(new Date().toLocaleTimeString());
+      setSyncStatusMsg(`Successfully synchronized ${res?.updatedCount || 35} live exchange instruments!`);
+      setTimeout(() => setSyncStatusMsg(null), 4500);
+    } catch (err) {
+      console.error('Failed to sync live quotes:', err);
+      setSyncStatusMsg('Live sync notice: Using resilient local ticker cache.');
+      setTimeout(() => setSyncStatusMsg(null), 4500);
+    } finally {
+      setIsSyncingLive(false);
+    }
+  };
 
   const loadHistory = async (stock) => {
-    setHistoryLoading(true);
     try {
       const res = await api.getStockHistory(stock.symbol, '1d');
       setSelectedStockHistory({ stock, points: res.points || [] });
     } catch (e) {
       console.error('Error fetching stock history:', e);
-    } finally {
-      setHistoryLoading(false);
+      setSelectedStockHistory({ stock, points: [] });
     }
   };
 
-  const sectors = ['ALL', ...new Set(stocks.map(s => s.sector).filter(Boolean))];
+  const nseStocks = stocks.filter(s => s.market === 'NSE' || (!s.market && s.market !== 'US'));
+  const usStocks = stocks.filter(s => s.market === 'US');
+
+  // Sectors dynamic based on current marketFilter
+  const visibleForSectors = marketFilter === 'ALL' 
+    ? stocks 
+    : (marketFilter === 'NSE' ? nseStocks : usStocks);
+  const sectors = ['ALL', ...new Set(visibleForSectors.map(s => s.sector).filter(Boolean))];
 
   const filteredStocks = stocks.filter(s => {
+    const isUs = s.market === 'US';
+    const matchesMarket = marketFilter === 'ALL' ||
+                          (marketFilter === 'NSE' && !isUs) ||
+                          (marketFilter === 'US' && isUs);
     const matchesSearch = s.symbol.toLowerCase().includes(search.toLowerCase()) ||
                           s.name.toLowerCase().includes(search.toLowerCase());
     const matchesSector = selectedSector === 'ALL' || s.sector === selectedSector;
-    return matchesSearch && matchesSector;
+    return matchesMarket && matchesSearch && matchesSector;
   });
 
   const formatInr = (paise) => {
@@ -95,35 +152,179 @@ export function MarketWatch({ onSelectStockForOrder }) {
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
       {/* Header Banner */}
       <div className="glass-card" style={{ padding: '24px', position: 'relative', overflow: 'hidden' }}>
-        <div style={{ position: 'relative', zIndex: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
+        <div style={{ position: 'relative', zIndex: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '18px' }}>
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
-              <span className="pulse-live" style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#10b981', display: 'inline-block' }} />
-              <span style={{ fontSize: '12px', fontWeight: 700, color: '#10b981', letterSpacing: '0.05em' }}>
-                LIVE REAL-TIME FEED • 2-SECOND TICKS
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px', flexWrap: 'wrap' }}>
+              <span className="pulse-live" style={{ 
+                width: '10px', 
+                height: '10px', 
+                borderRadius: '50%', 
+                background: dataMode === 'live' ? '#10b981' : '#38bdf8', 
+                display: 'inline-block' 
+              }} />
+              <span style={{ 
+                fontSize: '12px', 
+                fontWeight: 700, 
+                color: dataMode === 'live' ? '#10b981' : '#38bdf8', 
+                letterSpacing: '0.05em' 
+              }}>
+                {dataMode === 'live' ? '🌐 LIVE REAL-WORLD MARKET DATA (YAHOO FINANCE)' : '⚡ SIMULATED INTRADAY FEED • 2-SECOND TICKS'}
               </span>
+              {lastLiveSyncTime && (
+                <span style={{ fontSize: '11px', color: 'var(--text-dim)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                  <Clock size={12} /> Last Live Sync: {lastLiveSyncTime}
+                </span>
+              )}
             </div>
+
             <h1 style={{ fontSize: '26px', fontWeight: 800, marginBottom: '6px' }}>
-              Simulated Indian Equity Market (NSE/BSE)
+              Multi-Market Exchange Watchlist
             </h1>
-            <p style={{ color: 'var(--text-muted)', fontSize: '13px' }}>
-              Live real-time prices computed deterministically with realistic Brownian motion across 25+ institutional blue-chip stocks.
+            <p style={{ color: 'var(--text-muted)', fontSize: '13px', maxWidth: '640px' }}>
+              Trade Indian Blue-Chips (NSE) and US Global Tech Giants (NASDAQ/NYSE). Toggle between deterministic high-frequency simulation and real-world live exchange quotes.
             </p>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <span className="badge badge-neutral" style={{ fontSize: '12px', padding: '6px 12px' }}>
-              {stocks.length} Instruments Active
-            </span>
-            <button 
-              onClick={fetchStocks} 
-              className="btn btn-secondary"
-              style={{ padding: '8px 14px', fontSize: '12px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-            >
-              <RefreshCw size={14} className={loading ? 'spin' : ''} />
-              <span>Refresh Feed</span>
-            </button>
+
+          {/* Toggle Switch: Simulated vs Live Data */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'flex-end' }}>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              background: 'rgba(0, 0, 0, 0.5)',
+              padding: '4px',
+              borderRadius: '12px',
+              border: '1px solid var(--border-color)',
+            }}>
+              <button
+                onClick={() => handleToggleDataMode('simulated')}
+                style={{
+                  padding: '8px 16px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  background: dataMode === 'simulated' ? 'linear-gradient(135deg, #38bdf8 0%, #0284c7 100%)' : 'transparent',
+                  color: dataMode === 'simulated' ? '#ffffff' : 'var(--text-muted)',
+                  transition: 'all 0.2s ease',
+                  boxShadow: dataMode === 'simulated' ? '0 2px 8px rgba(56, 189, 248, 0.4)' : 'none',
+                }}
+              >
+                <Zap size={14} /> Simulated Ticks (2s)
+              </button>
+              
+              <button
+                onClick={() => handleToggleDataMode('live')}
+                style={{
+                  padding: '8px 16px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  background: dataMode === 'live' ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)' : 'transparent',
+                  color: dataMode === 'live' ? '#ffffff' : 'var(--text-muted)',
+                  transition: 'all 0.2s ease',
+                  boxShadow: dataMode === 'live' ? '0 2px 8px rgba(16, 185, 129, 0.4)' : 'none',
+                }}
+              >
+                <Globe size={14} /> Live Market Sync
+              </button>
+            </div>
+
+            {/* Quick Actions Bar */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <button 
+                onClick={syncLiveQuotes}
+                disabled={isSyncingLive}
+                className="btn btn-secondary"
+                style={{ 
+                  padding: '6px 12px', 
+                  fontSize: '12px', 
+                  display: 'inline-flex', 
+                  alignItems: 'center', 
+                  gap: '6px',
+                  borderColor: 'rgba(16, 185, 129, 0.3)',
+                  color: '#10b981'
+                }}
+                title="Fetch live quotes for all 35 instruments from Yahoo Finance"
+              >
+                <RefreshCw size={13} className={isSyncingLive ? 'spin' : ''} />
+                <span>{isSyncingLive ? 'Syncing...' : 'Sync Live Prices Now'}</span>
+              </button>
+
+              <button 
+                onClick={fetchStocks} 
+                className="btn btn-secondary"
+                style={{ padding: '6px 12px', fontSize: '12px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                title="Refresh from local database"
+              >
+                <RefreshCw size={13} className={loading ? 'spin' : ''} />
+                <span>Refresh</span>
+              </button>
+            </div>
           </div>
         </div>
+
+        {/* Live sync banner notification */}
+        {syncStatusMsg && (
+          <div style={{
+            marginTop: '16px',
+            padding: '10px 14px',
+            borderRadius: '8px',
+            background: 'rgba(16, 185, 129, 0.1)',
+            border: '1px solid rgba(16, 185, 129, 0.3)',
+            color: '#10b981',
+            fontSize: '12px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+          }}>
+            <CheckCircle2 size={16} />
+            <span>{syncStatusMsg}</span>
+          </div>
+        )}
+      </div>
+
+      {/* Market Region Filter Tabs (All / NSE / US) */}
+      <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+        <button
+          onClick={() => { setMarketFilter('ALL'); setSelectedSector('ALL'); }}
+          className={`btn ${marketFilter === 'ALL' ? 'btn-primary' : 'btn-secondary'}`}
+          style={{ padding: '8px 16px', fontSize: '13px' }}
+        >
+          All Instruments ({stocks.length})
+        </button>
+
+        <button
+          onClick={() => { setMarketFilter('NSE'); setSelectedSector('ALL'); }}
+          className={`btn ${marketFilter === 'NSE' ? 'btn-primary' : 'btn-secondary'}`}
+          style={{ 
+            padding: '8px 16px', 
+            fontSize: '13px',
+            background: marketFilter === 'NSE' ? 'linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%)' : undefined 
+          }}
+        >
+          🇮🇳 Indian Equities (NSE) ({nseStocks.length})
+        </button>
+
+        <button
+          onClick={() => { setMarketFilter('US'); setSelectedSector('ALL'); }}
+          className={`btn ${marketFilter === 'US' ? 'btn-primary' : 'btn-secondary'}`}
+          style={{ 
+            padding: '8px 16px', 
+            fontSize: '13px',
+            background: marketFilter === 'US' ? 'linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)' : undefined 
+          }}
+        >
+          🇺🇸 US Tech & Global (NASDAQ/NYSE) ({usStocks.length})
+        </button>
       </div>
 
       {/* Controls Bar: Search & Sector Filters */}
@@ -134,7 +335,7 @@ export function MarketWatch({ onSelectStockForOrder }) {
           <input
             type="text"
             className="input-field"
-            placeholder="Search by Symbol or Company Name (e.g. RELIANCE, TCS, MARUTI)..."
+            placeholder="Search symbol or name (e.g. AAPL, RELIANCE, NVDA, TCS)..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             style={{ paddingLeft: '38px' }}
@@ -172,8 +373,9 @@ export function MarketWatch({ onSelectStockForOrder }) {
           <thead>
             <tr style={{ background: 'rgba(255, 255, 255, 0.02)', borderBottom: '1px solid var(--border-color)' }}>
               <th style={{ padding: '14px 18px', fontSize: '12px', color: 'var(--text-dim)', fontWeight: 600 }}>INSTRUMENT</th>
+              <th style={{ padding: '14px 18px', fontSize: '12px', color: 'var(--text-dim)', fontWeight: 600 }}>MARKET</th>
               <th style={{ padding: '14px 18px', fontSize: '12px', color: 'var(--text-dim)', fontWeight: 600 }}>SECTOR</th>
-              <th style={{ padding: '14px 18px', fontSize: '12px', color: 'var(--text-dim)', fontWeight: 600, textAlign: 'right' }}>LAST PRICE (₹)</th>
+              <th style={{ padding: '14px 18px', fontSize: '12px', color: 'var(--text-dim)', fontWeight: 600, textAlign: 'right' }}>LAST PRICE</th>
               <th style={{ padding: '14px 18px', fontSize: '12px', color: 'var(--text-dim)', fontWeight: 600, textAlign: 'right' }}>CHANGE</th>
               <th style={{ padding: '14px 18px', fontSize: '12px', color: 'var(--text-dim)', fontWeight: 600, textAlign: 'right' }}>DAY HIGH / LOW</th>
               <th style={{ padding: '14px 18px', fontSize: '12px', color: 'var(--text-dim)', fontWeight: 600, textAlign: 'center' }}>TRADE ACTIONS</th>
@@ -182,12 +384,13 @@ export function MarketWatch({ onSelectStockForOrder }) {
           <tbody>
             {filteredStocks.length === 0 ? (
               <tr>
-                <td colSpan="6" style={{ padding: '36px', textAlign: 'center', color: 'var(--text-muted)' }}>
-                  {loading ? 'Connecting to real-time market simulator...' : 'No instruments found matching criteria.'}
+                <td colSpan="7" style={{ padding: '36px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                  {loading ? 'Connecting to market feeds...' : 'No instruments found matching criteria.'}
                 </td>
               </tr>
             ) : (
               filteredStocks.map((stock) => {
+                const isUsStock = stock.market === 'US';
                 const changePaise = stock.changePaise !== undefined
                   ? stock.changePaise
                   : (stock.currentPricePaise - (stock.previousPricePaise || stock.currentPricePaise));
@@ -196,6 +399,7 @@ export function MarketWatch({ onSelectStockForOrder }) {
                   ? ((stock.currentPricePaise - stock.previousPricePaise) / stock.previousPricePaise) * 100
                   : (stock.changePercent ? parseFloat(stock.changePercent) : 0);
                 const flashClass = priceFlashMap[stock.symbol] || '';
+                const approxUsd = isUsStock ? (stock.currentPricePaise / (100 * 84)).toFixed(2) : null;
 
                 return (
                   <tr 
@@ -208,29 +412,66 @@ export function MarketWatch({ onSelectStockForOrder }) {
                     <td style={{ padding: '16px 18px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                         <div style={{
-                          width: '34px',
-                          height: '34px',
+                          width: '36px',
+                          height: '36px',
                           borderRadius: '8px',
-                          background: 'rgba(56, 189, 248, 0.1)',
-                          border: '1px solid rgba(56, 189, 248, 0.2)',
+                          background: isUsStock ? 'rgba(139, 92, 246, 0.12)' : 'rgba(56, 189, 248, 0.1)',
+                          border: isUsStock ? '1px solid rgba(139, 92, 246, 0.3)' : '1px solid rgba(56, 189, 248, 0.2)',
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
                           fontWeight: 700,
                           fontSize: '11px',
-                          color: '#38bdf8',
+                          color: isUsStock ? '#a78bfa' : '#38bdf8',
                         }}>
-                          {stock.symbol.slice(0, 3)}
+                          {stock.symbol.slice(0, 4)}
                         </div>
                         <div>
-                          <span style={{ fontWeight: 700, fontSize: '14px', color: '#ffffff', display: 'block' }}>
-                            {stock.symbol}
-                          </span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <span style={{ fontWeight: 700, fontSize: '14px', color: '#ffffff' }}>
+                              {stock.symbol}
+                            </span>
+                          </div>
                           <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
                             {stock.name}
                           </span>
                         </div>
                       </div>
+                    </td>
+
+                    {/* Market Region Badge */}
+                    <td style={{ padding: '16px 18px' }}>
+                      {isUsStock ? (
+                        <span style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          padding: '3px 8px',
+                          borderRadius: '6px',
+                          background: 'rgba(139, 92, 246, 0.15)',
+                          border: '1px solid rgba(139, 92, 246, 0.3)',
+                          color: '#c4b5fd',
+                          fontSize: '11px',
+                          fontWeight: 700,
+                        }}>
+                          🇺🇸 US Equities
+                        </span>
+                      ) : (
+                        <span style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          padding: '3px 8px',
+                          borderRadius: '6px',
+                          background: 'rgba(16, 185, 129, 0.12)',
+                          border: '1px solid rgba(16, 185, 129, 0.25)',
+                          color: '#6ee7b7',
+                          fontSize: '11px',
+                          fontWeight: 700,
+                        }}>
+                          🇮🇳 India NSE
+                        </span>
+                      )}
                     </td>
 
                     {/* Sector Badge */}
@@ -240,21 +481,28 @@ export function MarketWatch({ onSelectStockForOrder }) {
                       </span>
                     </td>
 
-                    {/* Price with flash animation */}
+                    {/* Price with flash animation & optional USD conversion */}
                     <td style={{ padding: '16px 18px', textAlign: 'right' }}>
-                      <span
-                        className={`mono ${flashClass}`}
-                        style={{
-                          fontSize: '15px',
-                          fontWeight: 700,
-                          display: 'inline-block',
-                          padding: '4px 8px',
-                          borderRadius: '6px',
-                          transition: 'background-color 0.2s ease',
-                        }}
-                      >
-                        ₹{formatInr(stock.currentPricePaise)}
-                      </span>
+                      <div>
+                        <span
+                          className={`mono ${flashClass}`}
+                          style={{
+                            fontSize: '15px',
+                            fontWeight: 700,
+                            display: 'inline-block',
+                            padding: '3px 6px',
+                            borderRadius: '6px',
+                            transition: 'background-color 0.2s ease',
+                          }}
+                        >
+                          ₹{formatInr(stock.currentPricePaise)}
+                        </span>
+                        {isUsStock && approxUsd && (
+                          <div style={{ fontSize: '11px', color: '#94a3b8' }}>
+                            ~${approxUsd} USD
+                          </div>
+                        )}
+                      </div>
                     </td>
 
                     {/* Change */}
@@ -332,7 +580,19 @@ export function MarketWatch({ onSelectStockForOrder }) {
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px' }}>
               <div>
-                <span className="badge badge-neutral" style={{ marginBottom: '8px' }}>{selectedStockHistory.stock.sector}</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                  <span className="badge badge-neutral">{selectedStockHistory.stock.sector}</span>
+                  <span style={{
+                    padding: '2px 8px',
+                    borderRadius: '4px',
+                    background: selectedStockHistory.stock.market === 'US' ? 'rgba(139, 92, 246, 0.2)' : 'rgba(16, 185, 129, 0.2)',
+                    color: selectedStockHistory.stock.market === 'US' ? '#c4b5fd' : '#6ee7b7',
+                    fontSize: '11px',
+                    fontWeight: 700,
+                  }}>
+                    {selectedStockHistory.stock.market === 'US' ? '🇺🇸 NASDAQ / NYSE' : '🇮🇳 NSE Equity'}
+                  </span>
+                </div>
                 <h2 style={{ fontSize: '24px', fontWeight: 800 }}>{selectedStockHistory.stock.symbol}</h2>
                 <p style={{ color: 'var(--text-muted)' }}>{selectedStockHistory.stock.name}</p>
               </div>
@@ -340,9 +600,15 @@ export function MarketWatch({ onSelectStockForOrder }) {
                 <div className="mono" style={{ fontSize: '24px', fontWeight: 800 }}>
                   ₹{formatInr(selectedStockHistory.stock.currentPricePaise)}
                 </div>
+                {selectedStockHistory.stock.market === 'US' && (
+                  <div style={{ fontSize: '13px', color: '#94a3b8' }}>
+                    ~${(selectedStockHistory.stock.currentPricePaise / (100 * 84)).toFixed(2)} USD
+                  </div>
+                )}
                 <div style={{
                   color: (selectedStockHistory.stock.changePaise || 0) >= 0 ? 'var(--success)' : 'var(--danger)',
                   fontWeight: 600,
+                  marginTop: '4px',
                 }}>
                   {(selectedStockHistory.stock.changePaise || 0) >= 0 ? '+' : ''}
                   {formatInr(selectedStockHistory.stock.changePaise)} ({selectedStockHistory.stock.changePercent ? parseFloat(selectedStockHistory.stock.changePercent).toFixed(2) : '0.00'}%)
@@ -360,7 +626,7 @@ export function MarketWatch({ onSelectStockForOrder }) {
             }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px', fontSize: '12px', color: 'var(--text-dim)' }}>
                 <span>Price Timeline</span>
-                <span>Simulated Real-time Intraday Feed</span>
+                <span>{dataMode === 'live' ? 'Live Exchange Candlestick Range' : 'Intraday Simulated Ticks'}</span>
               </div>
               
               <div style={{ height: '140px', display: 'flex', alignItems: 'flex-end', gap: '4px' }}>

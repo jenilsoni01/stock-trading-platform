@@ -57,6 +57,7 @@ export const api = {
   getStockDetail: (symbol) => request(`/api/v1/stocks/${symbol}`),
   getStockQuote: (symbol) => request(`/api/v1/stocks/${symbol}/quote`),
   getStockHistory: (symbol, range = '1d') => request(`/api/v1/stocks/${symbol}/history?range=${range}`),
+  syncLiveMarket: () => request('/api/v1/stocks/sync-live', { method: 'POST' }),
 
   // Orders & Trades
   createOrder: (data, idempotencyKey) =>

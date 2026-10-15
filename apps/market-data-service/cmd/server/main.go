@@ -110,6 +110,7 @@ func main() {
 		v1.GET("/stocks/:symbol", stockHandler.GetStock)
 		v1.GET("/stocks/:symbol/quote", stockHandler.GetQuote)
 		v1.GET("/stocks/:symbol/history", stockHandler.GetPriceHistory)
+		v1.POST("/stocks/sync-live", stockHandler.SyncLivePrices)
 	}
 
 	httpServer := &http.Server{

@@ -132,10 +132,10 @@ export function OrdersTradesView() {
                 </tr>
               ) : (
                 orders.map((o) => (
-                  <tr key={o.orderId} className="glass-card-hover" style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.04)' }}>
+                  <tr key={o.orderId || o.id} className="glass-card-hover" style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.04)' }}>
                     <td style={{ padding: '14px 18px' }}>
                       <span className="mono" style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                        {o.orderId.slice(0, 8)}...
+                        {String(o.orderId || o.id || '').slice(0, 8)}...
                       </span>
                     </td>
                     <td style={{ padding: '14px 18px' }}>
@@ -202,10 +202,10 @@ export function OrdersTradesView() {
                 </tr>
               ) : (
                 trades.map((t) => (
-                  <tr key={t.tradeId} className="glass-card-hover" style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.04)' }}>
+                  <tr key={t.tradeId || t.id} className="glass-card-hover" style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.04)' }}>
                     <td style={{ padding: '14px 18px' }}>
                       <span className="mono" style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                        {t.tradeId.slice(0, 8)}...
+                        {String(t.tradeId || t.id || '').slice(0, 8)}...
                       </span>
                     </td>
                     <td style={{ padding: '14px 18px' }}>

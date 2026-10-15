@@ -2,7 +2,12 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
+	"log"
+	"net/http"
+	"sync"
 	"time"
 
 	"github.com/stock-trading-platform/market-data-service/internal/repository"
@@ -122,4 +127,119 @@ func (s *MarketService) UpdateStockPrice(ctx context.Context, symbol string, new
 		Timestamp:  time.Now().UTC(),
 	}
 	return s.priceHistoryRepo.Insert(ctx, entry)
+}
+
+type yahooChartResp struct {
+	Chart struct {
+		Result []struct {
+			Meta struct {
+				Currency               string  `json:"currency"`
+				Symbol                 string  `json:"symbol"`
+				RegularMarketPrice     float64 `json:"regularMarketPrice"`
+				ChartPreviousClose     float64 `json:"chartPreviousClose"`
+				RegularMarketDayHigh   float64 `json:"regularMarketDayHigh"`
+				RegularMarketDayLow    float64 `json:"regularMarketDayLow"`
+				RegularMarketVolume    int64   `json:"regularMarketVolume"`
+				RegularMarketChangePct float64 `json:"regularMarketChangePercent"`
+			} `json:"meta"`
+		} `json:"result"`
+	} `json:"chart"`
+}
+
+// SyncLiveQuotes fetches live real-world prices for all active stocks from Yahoo Finance
+func (s *MarketService) SyncLiveQuotes(ctx context.Context) (int, error) {
+	stocks, err := s.stockRepo.FindAll(ctx)
+	if err != nil {
+		return 0, err
+	}
+
+	client := &http.Client{Timeout: 8 * time.Second}
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	updatedCount := 0
+
+	sem := make(chan struct{}, 5)
+
+	for _, st := range stocks {
+		if !st.IsActive {
+			continue
+		}
+
+		wg.Add(1)
+		go func(stock repository.Stock) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+
+			yahooSymbol := stock.Symbol
+			if stock.Market == "NSE" || stock.Market == "" {
+				yahooSymbol = stock.Symbol + ".NS"
+			}
+
+			url := fmt.Sprintf("https://query1.finance.yahoo.com/v8/finance/chart/%s?interval=1d", yahooSymbol)
+			req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+			if err != nil {
+				return
+			}
+			req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+
+			resp, err := client.Do(req)
+			if err != nil || resp.StatusCode != http.StatusOK {
+				if resp != nil {
+					resp.Body.Close()
+				}
+				return
+			}
+			defer resp.Body.Close()
+
+			body, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return
+			}
+
+			var yResp yahooChartResp
+			if err := json.Unmarshal(body, &yResp); err != nil || len(yResp.Chart.Result) == 0 {
+				return
+			}
+
+			meta := yResp.Chart.Result[0].Meta
+			if meta.RegularMarketPrice <= 0 {
+				return
+			}
+
+			multiplier := 100.0
+			if meta.Currency == "USD" {
+				multiplier = 84.0 * 100.0 // Converted to INR paise at ~84 INR/USD
+			}
+
+			pricePaise := int64(meta.RegularMarketPrice * multiplier)
+			highPaise := int64(meta.RegularMarketDayHigh * multiplier)
+			lowPaise := int64(meta.RegularMarketDayLow * multiplier)
+			if highPaise <= 0 {
+				highPaise = pricePaise
+			}
+			if lowPaise <= 0 {
+				lowPaise = pricePaise
+			}
+
+			_ = s.stockRepo.UpdatePrice(ctx, stock.Symbol, pricePaise, meta.RegularMarketVolume)
+			_ = s.stockRepo.UpdateDayHighLow(ctx, stock.Symbol, highPaise)
+			_ = s.stockRepo.UpdateDayHighLow(ctx, stock.Symbol, lowPaise)
+
+			_ = s.priceHistoryRepo.Insert(ctx, repository.PriceHistory{
+				Symbol:     stock.Symbol,
+				PricePaise: pricePaise,
+				Volume:     meta.RegularMarketVolume,
+				Timestamp:  time.Now().UTC(),
+			})
+
+			mu.Lock()
+			updatedCount++
+			mu.Unlock()
+		}(st)
+	}
+
+	wg.Wait()
+	log.Printf("[MarketService] SyncLiveQuotes completed: %d/%d stocks updated from real-world exchange", updatedCount, len(stocks))
+	return updatedCount, nil
 }
