@@ -91,4 +91,13 @@ public class WalletDto {
             String description,
             String createdAt
     ) {}
+
+    /**
+     * User deposit request to credit funds into wallet
+     */
+    public record DepositRequest(
+            @NotNull(message = "Amount is required")
+            @Min(value = 100, message = "Minimum deposit is 100 paise (₹1)")
+            Long amountPaise
+    ) {}
 }

@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { api } from '../api';
 import { useAuth } from '../context/AuthContext';
-import { Search, TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight, RefreshCw, ShoppingCart } from 'lucide-react';
+import { Search, TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight, RefreshCw, ShoppingCart, Activity } from 'lucide-react';
 
 export function MarketWatch({ onSelectStockForOrder }) {
   const { user, openAuthModal } = useAuth();
@@ -11,11 +11,33 @@ export function MarketWatch({ onSelectStockForOrder }) {
   const [selectedSector, setSelectedSector] = useState('ALL');
   const [selectedStockHistory, setSelectedStockHistory] = useState(null);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [priceFlashMap, setPriceFlashMap] = useState({}); // { [symbol]: 'price-flash-up' | 'price-flash-down' }
+  const prevPricesRef = useRef({});
 
   const fetchStocks = async () => {
     try {
       const res = await api.getStocks();
       if (res && res.stocks) {
+        const newFlash = {};
+        res.stocks.forEach(s => {
+          const prev = prevPricesRef.current[s.symbol];
+          if (prev !== undefined && s.currentPricePaise !== prev) {
+            newFlash[s.symbol] = s.currentPricePaise > prev ? 'price-flash-up' : 'price-flash-down';
+          }
+          prevPricesRef.current[s.symbol] = s.currentPricePaise;
+        });
+
+        if (Object.keys(newFlash).length > 0) {
+          setPriceFlashMap(prev => ({ ...prev, ...newFlash }));
+          setTimeout(() => {
+            setPriceFlashMap(prev => {
+              const updated = { ...prev };
+              Object.keys(newFlash).forEach(k => delete updated[k]);
+              return updated;
+            });
+          }, 900);
+        }
+
         setStocks(res.stocks);
       }
     } catch (err) {
@@ -27,7 +49,8 @@ export function MarketWatch({ onSelectStockForOrder }) {
 
   useEffect(() => {
     fetchStocks();
-    const interval = setInterval(fetchStocks, 5000);
+    // 2-second real-time poll for live market experience
+    const interval = setInterval(fetchStocks, 2000);
     return () => clearInterval(interval);
   }, []);
 
@@ -72,23 +95,34 @@ export function MarketWatch({ onSelectStockForOrder }) {
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
       {/* Header Banner */}
       <div className="glass-card" style={{ padding: '24px', position: 'relative', overflow: 'hidden' }}>
-        <div style={{ position: 'relative', zIndex: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ position: 'relative', zIndex: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
           <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+              <span className="pulse-live" style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#10b981', display: 'inline-block' }} />
+              <span style={{ fontSize: '12px', fontWeight: 700, color: '#10b981', letterSpacing: '0.05em' }}>
+                LIVE REAL-TIME FEED • 2-SECOND TICKS
+              </span>
+            </div>
             <h1 style={{ fontSize: '26px', fontWeight: 800, marginBottom: '6px' }}>
               Simulated Indian Equity Market (NSE/BSE)
             </h1>
-            <p style={{ color: 'var(--text-muted)', fontSize: '14px' }}>
-              Live real-time prices computed deterministically with realistic brownian motion every 30s. Zero financial risk.
+            <p style={{ color: 'var(--text-muted)', fontSize: '13px' }}>
+              Live real-time prices computed deterministically with realistic Brownian motion across 25+ institutional blue-chip stocks.
             </p>
           </div>
-          <button 
-            onClick={fetchStocks} 
-            className="btn btn-secondary"
-            style={{ padding: '8px 14px', fontSize: '12px' }}
-          >
-            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
-            Refresh Ticker
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <span className="badge badge-neutral" style={{ fontSize: '12px', padding: '6px 12px' }}>
+              {stocks.length} Instruments Active
+            </span>
+            <button 
+              onClick={fetchStocks} 
+              className="btn btn-secondary"
+              style={{ padding: '8px 14px', fontSize: '12px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+            >
+              <RefreshCw size={14} className={loading ? 'spin' : ''} />
+              <span>Refresh Feed</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -100,7 +134,7 @@ export function MarketWatch({ onSelectStockForOrder }) {
           <input
             type="text"
             className="input-field"
-            placeholder="Search by Symbol or Company Name (e.g. RELIANCE, TCS)..."
+            placeholder="Search by Symbol or Company Name (e.g. RELIANCE, TCS, MARUTI)..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             style={{ paddingLeft: '38px' }}
@@ -140,7 +174,7 @@ export function MarketWatch({ onSelectStockForOrder }) {
               <th style={{ padding: '14px 18px', fontSize: '12px', color: 'var(--text-dim)', fontWeight: 600 }}>INSTRUMENT</th>
               <th style={{ padding: '14px 18px', fontSize: '12px', color: 'var(--text-dim)', fontWeight: 600 }}>SECTOR</th>
               <th style={{ padding: '14px 18px', fontSize: '12px', color: 'var(--text-dim)', fontWeight: 600, textAlign: 'right' }}>LAST PRICE (₹)</th>
-              <th style={{ padding: '14px 18px', fontSize: '12px', color: 'var(--text-dim)', fontWeight: 600, textAlign: 'right' }}>24H CHANGE</th>
+              <th style={{ padding: '14px 18px', fontSize: '12px', color: 'var(--text-dim)', fontWeight: 600, textAlign: 'right' }}>CHANGE</th>
               <th style={{ padding: '14px 18px', fontSize: '12px', color: 'var(--text-dim)', fontWeight: 600, textAlign: 'right' }}>DAY HIGH / LOW</th>
               <th style={{ padding: '14px 18px', fontSize: '12px', color: 'var(--text-dim)', fontWeight: 600, textAlign: 'center' }}>TRADE ACTIONS</th>
             </tr>
@@ -149,13 +183,19 @@ export function MarketWatch({ onSelectStockForOrder }) {
             {filteredStocks.length === 0 ? (
               <tr>
                 <td colSpan="6" style={{ padding: '36px', textAlign: 'center', color: 'var(--text-muted)' }}>
-                  {loading ? 'Loading live stock feeds from MongoDB & Simulator...' : 'No instruments found matching criteria.'}
+                  {loading ? 'Connecting to real-time market simulator...' : 'No instruments found matching criteria.'}
                 </td>
               </tr>
             ) : (
               filteredStocks.map((stock) => {
-                const isPositive = (stock.changePaise || 0) >= 0;
-                const changePct = stock.changePercent || 0;
+                const changePaise = stock.changePaise !== undefined
+                  ? stock.changePaise
+                  : (stock.currentPricePaise - (stock.previousPricePaise || stock.currentPricePaise));
+                const isPositive = changePaise >= 0;
+                const changePct = stock.previousPricePaise && stock.previousPricePaise > 0
+                  ? ((stock.currentPricePaise - stock.previousPricePaise) / stock.previousPricePaise) * 100
+                  : (stock.changePercent ? parseFloat(stock.changePercent) : 0);
+                const flashClass = priceFlashMap[stock.symbol] || '';
 
                 return (
                   <tr 
@@ -200,9 +240,19 @@ export function MarketWatch({ onSelectStockForOrder }) {
                       </span>
                     </td>
 
-                    {/* Price */}
+                    {/* Price with flash animation */}
                     <td style={{ padding: '16px 18px', textAlign: 'right' }}>
-                      <span className="mono" style={{ fontSize: '15px', fontWeight: 700 }}>
+                      <span
+                        className={`mono ${flashClass}`}
+                        style={{
+                          fontSize: '15px',
+                          fontWeight: 700,
+                          display: 'inline-block',
+                          padding: '4px 8px',
+                          borderRadius: '6px',
+                          transition: 'background-color 0.2s ease',
+                        }}
+                      >
                         ₹{formatInr(stock.currentPricePaise)}
                       </span>
                     </td>
@@ -218,7 +268,7 @@ export function MarketWatch({ onSelectStockForOrder }) {
                       }}>
                         {isPositive ? <ArrowUpRight size={15} /> : <ArrowDownRight size={15} />}
                         <span className="mono">
-                          {isPositive ? '+' : ''}{formatInr(stock.changePaise)} ({isPositive ? '+' : ''}{changePct.toFixed(2)}%)
+                          {isPositive ? '+' : ''}{formatInr(changePaise)} ({isPositive ? '+' : ''}{changePct.toFixed(2)}%)
                         </span>
                       </div>
                     </td>
@@ -295,7 +345,7 @@ export function MarketWatch({ onSelectStockForOrder }) {
                   fontWeight: 600,
                 }}>
                   {(selectedStockHistory.stock.changePaise || 0) >= 0 ? '+' : ''}
-                  {formatInr(selectedStockHistory.stock.changePaise)} ({selectedStockHistory.stock.changePercent?.toFixed(2)}%)
+                  {formatInr(selectedStockHistory.stock.changePaise)} ({selectedStockHistory.stock.changePercent ? parseFloat(selectedStockHistory.stock.changePercent).toFixed(2) : '0.00'}%)
                 </div>
               </div>
             </div>
@@ -310,7 +360,7 @@ export function MarketWatch({ onSelectStockForOrder }) {
             }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px', fontSize: '12px', color: 'var(--text-dim)' }}>
                 <span>Price Timeline</span>
-                <span>Simulated Intraday Feed</span>
+                <span>Simulated Real-time Intraday Feed</span>
               </div>
               
               <div style={{ height: '140px', display: 'flex', alignItems: 'flex-end', gap: '4px' }}>

@@ -50,6 +50,7 @@ export const api = {
   // Wallet
   getWallet: () => request('/api/v1/wallet'),
   getWalletTransactions: (limit = 50) => request(`/api/v1/wallet/transactions?limit=${limit}`),
+  depositFunds: (amountPaise) => request('/api/v1/wallet/deposit', { method: 'POST', body: JSON.stringify({ amountPaise }) }),
 
   // Market Data
   getStocks: () => request('/api/v1/stocks'),

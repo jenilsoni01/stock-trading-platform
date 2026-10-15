@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -63,8 +64,21 @@ func main() {
 	priceHistoryRepo := repository.NewPriceHistoryRepository(db)
 	marketService := service.NewMarketService(stockRepo, priceHistoryRepo)
 
-	// Start price simulator (controlled, not unbounded)
-	simulator := service.NewPriceSimulator(marketService, stockRepo)
+	// Auto-seed stocks and history if MongoDB is empty
+	if err := stockRepo.SeedIfEmpty(ctx, priceHistoryRepo); err != nil {
+		log.Printf("Warning: failed to seed stocks: %v", err)
+	} else {
+		log.Println("Stock catalog verification/seeding completed")
+	}
+
+	// Start price simulator with configured interval (default 2s for live ticker experience)
+	simIntervalSec := 2
+	if envSec := os.Getenv("SIMULATOR_INTERVAL_SECONDS"); envSec != "" {
+		if sec, err := strconv.Atoi(envSec); err == nil && sec > 0 {
+			simIntervalSec = sec
+		}
+	}
+	simulator := service.NewPriceSimulatorWithInterval(marketService, stockRepo, time.Duration(simIntervalSec)*time.Second)
 	go simulator.Start(context.Background())
 
 	// === HTTP Server (Gin) ===

@@ -4,6 +4,7 @@ import com.stp.identity.dto.WalletDto;
 import com.stp.identity.service.WalletService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import jakarta.validation.Valid;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -37,6 +38,19 @@ public class WalletController {
     public ResponseEntity<WalletDto.WalletResponse> getWallet(Authentication authentication) {
         UUID userId = (UUID) authentication.getPrincipal();
         WalletDto.WalletResponse response = walletService.getWallet(userId);
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Deposit virtual funds into wallet.
+     */
+    @PostMapping("/deposit")
+    public ResponseEntity<WalletDto.WalletResponse> depositFunds(
+            Authentication authentication,
+            @Valid @RequestBody WalletDto.DepositRequest request) {
+        UUID userId = (UUID) authentication.getPrincipal();
+        log.info("User {} depositing {} paise", userId, request.amountPaise());
+        WalletDto.WalletResponse response = walletService.depositFunds(userId, request.amountPaise());
         return ResponseEntity.ok(response);
     }
 

@@ -54,8 +54,8 @@ services:
       - PORT=8082
       - GRPC_PORT=50051
       - MONGODB_URI=mongodb://md_service:dev_mongo_pass@mongodb:27017/market_data_db?authSource=admin
-      - SIMULATOR_INTERVAL_SECONDS=30
-      - SIMULATOR_MAX_CHANGE_PERCENT=2.0
+      - SIMULATOR_INTERVAL_SECONDS=2
+      - SIMULATOR_MAX_CHANGE_PERCENT=1.5
       - SIMULATOR_SEED=42
     depends_on:
       mongodb:

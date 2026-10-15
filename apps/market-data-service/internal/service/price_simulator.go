@@ -32,12 +32,19 @@ type PriceSimulator struct {
 }
 
 func NewPriceSimulator(marketService *MarketService, stockRepo *repository.StockRepository) *PriceSimulator {
+	return NewPriceSimulatorWithInterval(marketService, stockRepo, 2*time.Second)
+}
+
+func NewPriceSimulatorWithInterval(marketService *MarketService, stockRepo *repository.StockRepository, interval time.Duration) *PriceSimulator {
+	if interval <= 0 {
+		interval = 2 * time.Second
+	}
 	return &PriceSimulator{
 		marketService: marketService,
 		stockRepo:     stockRepo,
-		interval:      30 * time.Second,
-		maxChangePct:  0.02, // ±2% max change per tick
-		rng:           rand.New(rand.NewSource(42)), // Deterministic seed for reproducibility
+		interval:      interval,
+		maxChangePct:  0.015, // ±1.5% max change per tick
+		rng:           rand.New(rand.NewSource(time.Now().UnixNano())),
 		stopCh:        make(chan struct{}),
 	}
 }

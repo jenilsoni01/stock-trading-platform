@@ -1,12 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../api';
 import { useAuth } from '../context/AuthContext';
-import { Wallet, ShieldCheck, History, ArrowDownLeft, ArrowUpRight, Lock, CheckCircle2 } from 'lucide-react';
+import { Wallet, ShieldCheck, History, ArrowDownLeft, ArrowUpRight, Lock, CheckCircle2, PlusCircle, X, Loader2, Sparkles } from 'lucide-react';
 
 export function WalletLedgerView() {
   const { user, wallet, refreshWallet, openAuthModal } = useAuth();
   const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [isDepositOpen, setIsDepositOpen] = useState(false);
+  const [depositAmountInr, setDepositAmountInr] = useState('50000');
+  const [depositLoading, setDepositLoading] = useState(false);
+  const [depositSuccess, setDepositSuccess] = useState(null);
+  const [depositError, setDepositError] = useState(null);
 
   const fetchLedger = async () => {
     if (!user) return;
@@ -50,19 +55,66 @@ export function WalletLedgerView() {
     });
   };
 
+  const handleDepositSubmit = async (e) => {
+    e.preventDefault();
+    setDepositError(null);
+    setDepositSuccess(null);
+
+    const inrValue = parseFloat(depositAmountInr);
+    if (!inrValue || inrValue <= 0) {
+      setDepositError('Please enter a valid deposit amount');
+      return;
+    }
+
+    const amountPaise = Math.round(inrValue * 100);
+    setDepositLoading(true);
+
+    try {
+      await api.depositFunds(amountPaise);
+      await fetchLedger();
+      setDepositSuccess(`Successfully deposited ₹${inrValue.toLocaleString('en-IN', { minimumFractionDigits: 2 })} into your wallet!`);
+      setTimeout(() => {
+        setIsDepositOpen(false);
+        setDepositSuccess(null);
+      }, 1500);
+    } catch (err) {
+      setDepositError(err.message || 'Deposit failed');
+    } finally {
+      setDepositLoading(false);
+    }
+  };
+
+  const setPresetAmount = (inr) => {
+    setDepositAmountInr(inr.toString());
+  };
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-      {/* Header */}
-      <div className="glass-card" style={{ padding: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      {/* Header with Deposit Action */}
+      <div className="glass-card" style={{ padding: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
         <div>
           <h1 style={{ fontSize: '24px', fontWeight: 800 }}>Wallet & Double-Entry Ledger</h1>
           <p style={{ color: 'var(--text-muted)', fontSize: '13px' }}>
             ACID ledger in PostgreSQL with integer paise arithmetic and pessimistic row-locking
           </p>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#10b981', fontSize: '13px', fontWeight: 600 }}>
-          <ShieldCheck size={18} />
-          <span>Financial Invariants Verified</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#10b981', fontSize: '13px', fontWeight: 600 }}>
+            <ShieldCheck size={18} />
+            <span>Financial Invariants Verified</span>
+          </div>
+          <button
+            onClick={() => {
+              setDepositError(null);
+              setDepositSuccess(null);
+              setIsDepositOpen(true);
+            }}
+            className="btn btn-primary"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '10px 18px', fontWeight: 700 }}
+          >
+            <PlusCircle size={18} />
+            <span>Deposit Funds</span>
+          </button>
         </div>
       </div>
 
@@ -141,17 +193,18 @@ export function WalletLedgerView() {
               </tr>
             ) : (
               transactions.map((tx) => {
-                const isCredit = tx.operationType?.includes('CREDIT') || tx.operationType?.includes('REGISTRATION') || tx.operationType?.includes('RELEASE');
+                const op = tx.entryType || tx.operationType || 'TRANSACTION';
+                const isCredit = op.includes('CREDIT') || op.includes('INITIAL') || op.includes('RELEASE') || op.includes('DEPOSIT') || op.includes('REFUND');
                 return (
-                  <tr key={tx.entryId || tx.id} className="glass-card-hover" style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.04)' }}>
+                  <tr key={tx.id || tx.entryId} className="glass-card-hover" style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.04)' }}>
                     <td style={{ padding: '14px 18px' }}>
                       <span className="mono" style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                        {(tx.entryId || tx.id)?.slice(0, 8)}...
+                        {(tx.id || tx.entryId)?.slice(0, 8)}...
                       </span>
                     </td>
                     <td style={{ padding: '14px 18px' }}>
                       <span className={`badge ${isCredit ? 'badge-success' : 'badge-danger'}`}>
-                        {tx.operationType}
+                        {op}
                       </span>
                     </td>
                     <td style={{ padding: '14px 18px', fontSize: '13px', color: '#f1f5f9' }}>
@@ -180,6 +233,161 @@ export function WalletLedgerView() {
           </tbody>
         </table>
       </div>
+
+      {/* Deposit Funds Modal */}
+      {isDepositOpen && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.75)',
+          backdropFilter: 'blur(8px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 110,
+          padding: '20px',
+        }} onClick={() => setIsDepositOpen(false)}>
+          <div
+            className="glass-card"
+            style={{
+              width: '100%',
+              maxWidth: '460px',
+              padding: '32px',
+              background: '#121826',
+              border: '1px solid rgba(255, 255, 255, 0.14)',
+              boxShadow: '0 20px 40px rgba(0, 0, 0, 0.6)',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+              <div>
+                <h2 style={{ fontSize: '20px', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Sparkles size={20} color="#10b981" />
+                  Deposit Virtual Trading Funds
+                </h2>
+                <p style={{ color: 'var(--text-muted)', fontSize: '13px', marginTop: '4px' }}>
+                  Credit virtual INR into your trading account with immediate PostgreSQL ACID ledger audit
+                </p>
+              </div>
+              <button onClick={() => setIsDepositOpen(false)} className="btn btn-secondary" style={{ padding: '6px', borderRadius: '50%' }}>
+                <X size={16} />
+              </button>
+            </div>
+
+            {depositSuccess && (
+              <div style={{
+                background: 'rgba(16, 185, 129, 0.15)',
+                border: '1px solid #10b981',
+                padding: '12px 16px',
+                borderRadius: '8px',
+                color: '#10b981',
+                fontSize: '13px',
+                marginBottom: '16px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+              }}>
+                <CheckCircle2 size={16} />
+                <span>{depositSuccess}</span>
+              </div>
+            )}
+
+            {depositError && (
+              <div style={{
+                background: 'rgba(239, 68, 68, 0.15)',
+                border: '1px solid #ef4444',
+                padding: '12px 16px',
+                borderRadius: '8px',
+                color: '#ef4444',
+                fontSize: '13px',
+                marginBottom: '16px',
+              }}>
+                {depositError}
+              </div>
+            )}
+
+            <form onSubmit={handleDepositSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              {/* Quick Presets */}
+              <div>
+                <label style={{ fontSize: '12px', color: 'var(--text-dim)', fontWeight: 600, display: 'block', marginBottom: '8px' }}>
+                  QUICK SELECT AMOUNT
+                </label>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px' }}>
+                  {[10000, 50000, 100000, 500000].map((amt) => (
+                    <button
+                      key={amt}
+                      type="button"
+                      onClick={() => setPresetAmount(amt)}
+                      className="btn btn-secondary"
+                      style={{
+                        padding: '8px 4px',
+                        fontSize: '12px',
+                        fontWeight: 700,
+                        borderColor: parseFloat(depositAmountInr) === amt ? '#10b981' : undefined,
+                        color: parseFloat(depositAmountInr) === amt ? '#10b981' : undefined,
+                      }}
+                    >
+                      +₹{(amt / 1000)}k
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Amount input */}
+              <div>
+                <label style={{ fontSize: '12px', color: 'var(--text-dim)', fontWeight: 600, display: 'block', marginBottom: '8px' }}>
+                  DEPOSIT AMOUNT (INR ₹)
+                </label>
+                <div style={{ position: 'relative' }}>
+                  <span style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', fontWeight: 700 }}>
+                    ₹
+                  </span>
+                  <input
+                    type="number"
+                    min="1"
+                    step="1"
+                    required
+                    value={depositAmountInr}
+                    onChange={(e) => setDepositAmountInr(e.target.value)}
+                    className="input-field"
+                    style={{ paddingLeft: '32px', fontSize: '18px', fontWeight: 700 }}
+                  />
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '6px', fontSize: '12px', color: 'var(--text-dim)' }}>
+                  <span>Integer Paise equivalent:</span>
+                  <span className="mono" style={{ color: '#38bdf8', fontWeight: 600 }}>
+                    {(parseFloat(depositAmountInr || 0) * 100).toLocaleString('en-IN')} paise
+                  </span>
+                </div>
+              </div>
+
+              {/* Action buttons */}
+              <div style={{ display: 'flex', gap: '10px', marginTop: '12px' }}>
+                <button
+                  type="button"
+                  onClick={() => setIsDepositOpen(false)}
+                  className="btn btn-secondary"
+                  style={{ flex: 1 }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={depositLoading}
+                  className="btn btn-primary"
+                  style={{ flex: 2, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '8px', background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)' }}
+                >
+                  {depositLoading ? <Loader2 size={16} className="spin" /> : <PlusCircle size={16} />}
+                  <span>Confirm Deposit</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

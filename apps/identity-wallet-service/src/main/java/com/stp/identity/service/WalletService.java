@@ -316,6 +316,41 @@ public class WalletService {
         return toWalletResponse(wallet);
     }
 
+    /**
+     * Deposit virtual funds into user's wallet.
+     * Credits available balance and records CREDIT_INITIAL entry in append-only ledger.
+     */
+    @Transactional
+    public WalletDto.WalletResponse depositFunds(UUID userId, long amountPaise) {
+        if (amountPaise <= 0) {
+            throw new IllegalArgumentException("Deposit amount must be positive");
+        }
+
+        WalletAccount wallet = walletAccountRepository.findByUserIdForUpdate(userId)
+                .orElseThrow(() -> new IllegalArgumentException("Wallet not found for user: " + userId));
+
+        wallet.setAvailableBalancePaise(wallet.getAvailableBalancePaise() + amountPaise);
+        walletAccountRepository.save(wallet);
+
+        // Record in ledger
+        WalletLedger ledger = new WalletLedger();
+        ledger.setWalletId(wallet.getId());
+        ledger.setUserId(userId);
+        ledger.setEntryType(WalletLedger.EntryType.CREDIT_INITIAL);
+        ledger.setAmountPaise(amountPaise);
+        ledger.setBalanceAfterPaise(wallet.getAvailableBalancePaise());
+        ledger.setReferenceId(UUID.randomUUID().toString());
+        ledger.setReferenceType("USER_DEPOSIT");
+        ledger.setDescription("Virtual cash deposit of ₹" + String.format("%.2f", amountPaise / 100.0));
+        ledger.setIdempotencyKey("deposit-" + UUID.randomUUID());
+        walletLedgerRepository.save(ledger);
+
+        log.info("Funds deposited: userId={}, amountPaise={}, newBalance={}",
+                userId, amountPaise, wallet.getAvailableBalancePaise());
+
+        return toWalletResponse(wallet);
+    }
+
     // === Mappers ===
 
     private WalletDto.WalletResponse toWalletResponse(WalletAccount wallet) {
