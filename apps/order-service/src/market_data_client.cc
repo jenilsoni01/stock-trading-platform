@@ -23,14 +23,26 @@ QuoteInfo MarketDataClient::getQuote(const std::string& symbol) {
         if (reqResult == drogon::ReqResult::Ok && response && response->statusCode() == drogon::k200OK) {
             auto jsonPtr = response->getJsonObject();
             if (jsonPtr) {
-                quote.currentPricePaise = (*jsonPtr).get("currentPricePaise", 0).asInt64();
-                quote.previousClosePaise = (*jsonPtr).get("previousClosePaise", 0).asInt64();
+                if ((*jsonPtr).isMember("currentPricePaise") && !(*jsonPtr)["currentPricePaise"].isNull()) {
+                    quote.currentPricePaise = (*jsonPtr).get("currentPricePaise", 0).asInt64();
+                } else if ((*jsonPtr).isMember("pricePaise") && !(*jsonPtr)["pricePaise"].isNull()) {
+                    quote.currentPricePaise = (*jsonPtr).get("pricePaise", 0).asInt64();
+                }
+
+                if ((*jsonPtr).isMember("previousClosePaise") && !(*jsonPtr)["previousClosePaise"].isNull()) {
+                    quote.previousClosePaise = (*jsonPtr).get("previousClosePaise", 0).asInt64();
+                } else if ((*jsonPtr).isMember("previousPricePaise") && !(*jsonPtr)["previousPricePaise"].isNull()) {
+                    quote.previousClosePaise = (*jsonPtr).get("previousPricePaise", 0).asInt64();
+                }
+
                 quote.dayHighPaise = (*jsonPtr).get("dayHighPaise", 0).asInt64();
                 quote.dayLowPaise = (*jsonPtr).get("dayLowPaise", 0).asInt64();
                 quote.valid = (quote.currentPricePaise > 0);
             }
         } else {
-            quote.errorMessage = response ? ("HTTP " + std::to_string(response->statusCode())) : "Connection timeout";
+            std::string statusStr = response ? std::to_string(response->statusCode()) : "TIMEOUT";
+            LOG_WARN << "MarketDataClient getQuote failed for " << symbol << ": status=" << statusStr;
+            quote.errorMessage = response ? ("HTTP " + statusStr) : "Connection timeout";
         }
     } catch (const std::exception& e) {
         LOG_ERROR << "MarketDataClient getQuote exception: " << e.what();

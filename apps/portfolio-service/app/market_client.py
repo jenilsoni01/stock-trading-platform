@@ -16,7 +16,7 @@ class MarketDataClient:
                 resp = await client.get(f"{self.base_url}/api/v1/stocks/{symbol}/quote")
                 if resp.status_code == 200:
                     data = resp.json()
-                    return data.get("currentPricePaise")
+                    return data.get("currentPricePaise") or data.get("pricePaise")
         except Exception as e:
             logger.warning(f"Failed to fetch price for {symbol}: {e}")
         return None

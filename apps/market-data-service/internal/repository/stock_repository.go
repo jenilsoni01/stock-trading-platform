@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -56,8 +57,9 @@ func (r *StockRepository) FindAll(ctx context.Context) ([]Stock, error) {
 
 // FindBySymbol returns a stock by its ticker symbol
 func (r *StockRepository) FindBySymbol(ctx context.Context, symbol string) (*Stock, error) {
+	cleanSymbol := strings.ToUpper(strings.TrimSpace(symbol))
 	var stock Stock
-	err := r.collection.FindOne(ctx, bson.M{"symbol": symbol}).Decode(&stock)
+	err := r.collection.FindOne(ctx, bson.M{"symbol": cleanSymbol}).Decode(&stock)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			return nil, nil

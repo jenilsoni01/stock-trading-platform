@@ -16,8 +16,10 @@ import (
 // QuoteResponse represents a price quote for API responses
 type QuoteResponse struct {
 	Symbol             string    `json:"symbol"`
+	CurrentPricePaise  int64     `json:"currentPricePaise"`
 	PricePaise         int64     `json:"pricePaise"`
 	PreviousPricePaise int64     `json:"previousPricePaise"`
+	PreviousClosePaise int64     `json:"previousClosePaise"`
 	ChangePaise        int64     `json:"changePaise"`
 	ChangePercent      string    `json:"changePercent"`
 	DayHighPaise       int64     `json:"dayHighPaise"`
@@ -78,8 +80,10 @@ func (s *MarketService) GetQuote(ctx context.Context, symbol string) (*QuoteResp
 
 	return &QuoteResponse{
 		Symbol:             stock.Symbol,
+		CurrentPricePaise:  stock.CurrentPricePaise,
 		PricePaise:         stock.CurrentPricePaise,
 		PreviousPricePaise: stock.PreviousPricePaise,
+		PreviousClosePaise: stock.PreviousPricePaise,
 		ChangePaise:        changePaise,
 		ChangePercent:      changePercent,
 		DayHighPaise:       stock.DayHighPaise,
