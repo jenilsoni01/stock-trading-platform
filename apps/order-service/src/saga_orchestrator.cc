@@ -177,6 +177,9 @@ std::pair<int, Json::Value> SagaOrchestrator::executeBuy(const std::string& user
     // Atomic DB commit of Order EXECUTED + Trade + Outbox records
     repo_->recordTradeAndExecuteOrder(trade, order, orderExecOutbox, tradeExecOutbox);
 
+    // Asynchronously dispatch trade projection to portfolio-service and notification-service
+    dispatchTradeEvents(trade, correlationId);
+
     // Step 5: Capture Cash Reservation (Debit total value, release any remainder)
     bool captured = walletClient_->captureReservation(reservationId, totalValuePaise);
     if (!captured) {
@@ -258,6 +261,9 @@ std::pair<int, Json::Value> SagaOrchestrator::executeSell(const std::string& use
     repo_->createOrder(order, "CREDIT_CASH", orderExecOutbox);
     repo_->recordTradeAndExecuteOrder(trade, order, orderExecOutbox, tradeExecOutbox);
 
+    // Asynchronously dispatch trade projection to portfolio-service and notification-service
+    dispatchTradeEvents(trade, correlationId);
+
     // Step 4: Credit proceeds to Wallet
     std::string creditKey = "order-credit-" + orderId;
     walletClient_->creditCash(userId, totalValuePaise, "Proceeds from selling " + std::to_string(req.quantity) + " " + req.symbol, creditKey);
@@ -317,6 +323,63 @@ std::pair<int, Json::Value> SagaOrchestrator::cancelOrder(const std::string& use
     res["status"] = "CANCELLED";
     res["message"] = "Order successfully cancelled";
     return {200, res};
+}
+
+void SagaOrchestrator::dispatchTradeEvents(const Trade& trade, const std::string& correlationId) {
+    // 1. Dispatch trade projection to portfolio-service
+    std::string portfolioUrl = "http://portfolio-service:8084";
+    if (const char* env = std::getenv("PORTFOLIO_SERVICE_URL")) {
+        portfolioUrl = env;
+    }
+
+    try {
+        auto pClient = drogon::HttpClient::newHttpClient(portfolioUrl);
+        auto pReq = drogon::HttpRequest::newHttpRequest();
+        pReq->setMethod(drogon::Post);
+        pReq->setPath("/internal/v1/portfolio/trades");
+        pReq->setContentTypeCode(drogon::CT_APPLICATION_JSON);
+        Json::StreamWriterBuilder writer;
+        pReq->setBody(Json::writeString(writer, trade.toJson()));
+        pClient->sendRequest(pReq, [tradeId = trade.tradeId](drogon::ReqResult res, const drogon::HttpResponsePtr& resp) {
+            if (res == drogon::ReqResult::Ok && resp && resp->statusCode() == drogon::k200OK) {
+                LOG_INFO << "Portfolio trade projection successfully processed for trade: " << tradeId;
+            } else {
+                LOG_WARN << "Portfolio projection call returned non-200 for trade: " << tradeId;
+            }
+        }, 3.0);
+    } catch (const std::exception& e) {
+        LOG_WARN << "Exception dispatching trade to portfolio-service: " << e.what();
+    }
+
+    // 2. Dispatch notification event to notification-service
+    std::string notifUrl = "http://notification-service:8085";
+    if (const char* env = std::getenv("NOTIFICATION_SERVICE_URL")) {
+        notifUrl = env;
+    }
+
+    try {
+        auto nClient = drogon::HttpClient::newHttpClient(notifUrl);
+        auto nReq = drogon::HttpRequest::newHttpRequest();
+        nReq->setMethod(drogon::Post);
+        nReq->setPath("/internal/v1/notifications/events");
+        nReq->setContentTypeCode(drogon::CT_APPLICATION_JSON);
+        
+        Json::Value notifBody;
+        notifBody["eventType"] = "trades.executed";
+        notifBody["aggregateId"] = trade.tradeId;
+        notifBody["correlationId"] = correlationId;
+        notifBody["payload"] = trade.toJson();
+
+        Json::StreamWriterBuilder writer;
+        nReq->setBody(Json::writeString(writer, notifBody));
+        nClient->sendRequest(nReq, [](drogon::ReqResult res, const drogon::HttpResponsePtr& resp) {
+            if (res == drogon::ReqResult::Ok) {
+                LOG_INFO << "Notification event dispatched successfully";
+            }
+        }, 3.0);
+    } catch (const std::exception& e) {
+        LOG_WARN << "Exception dispatching notification: " << e.what();
+    }
 }
 
 } // namespace stp::order

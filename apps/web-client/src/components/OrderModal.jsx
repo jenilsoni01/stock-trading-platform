@@ -56,6 +56,7 @@ export function OrderModal({ stock, initialSide = 'BUY', onClose, onOrderComplet
       const userId = user?.id || user?.userId || 'trader';
       const idempotencyKey = `ord-${String(userId).slice(0, 8)}-${Date.now()}`;
       const payload = {
+        userId: userId,
         symbol: stock.symbol,
         side: side,
         orderType: orderType,

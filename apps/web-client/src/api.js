@@ -66,16 +66,16 @@ export const api = {
       headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {},
       body: JSON.stringify(data),
     }),
-  getOrders: (limit = 50) => request(`/api/v1/orders?limit=${limit}`),
+  getOrders: (limit = 50, userId) => request(`/api/v1/orders?limit=${limit}${userId ? `&userId=${userId}` : ''}`),
   getOrder: (id) => request(`/api/v1/orders/${id}`),
   cancelOrder: (id) => request(`/api/v1/orders/${id}/cancel`, { method: 'POST' }),
-  getTrades: (limit = 50) => request(`/api/v1/trades?limit=${limit}`),
+  getTrades: (limit = 50, userId) => request(`/api/v1/trades?limit=${limit}${userId ? `&userId=${userId}` : ''}`),
 
   // Portfolio
-  getPortfolio: () => request('/api/v1/portfolio'),
-  getHoldings: () => request('/api/v1/portfolio/holdings'),
-  getPosition: (symbol) => request(`/api/v1/portfolio/positions/${symbol}`),
-  getPerformance: () => request('/api/v1/portfolio/performance'),
+  getPortfolio: (userId) => request(`/api/v1/portfolio${userId ? `?userId=${userId}` : ''}`),
+  getHoldings: (userId) => request(`/api/v1/portfolio/holdings${userId ? `?userId=${userId}` : ''}`),
+  getPosition: (symbol, userId) => request(`/api/v1/portfolio/positions/${symbol}${userId ? `?userId=${userId}` : ''}`),
+  getPerformance: (userId) => request(`/api/v1/portfolio/performance${userId ? `?userId=${userId}` : ''}`),
 
   // Notifications
   getNotifications: (unreadOnly = false) => request(`/api/v1/notifications?unreadOnly=${unreadOnly}`),

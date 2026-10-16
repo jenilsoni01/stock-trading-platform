@@ -23,10 +23,11 @@ export function PortfolioView({ onSelectStockForOrder }) {
   const fetchPortfolioData = async () => {
     if (!user) return;
     try {
+      const uid = user?.id || user?.userId;
       const [sumRes, holdRes, perfRes] = await Promise.all([
-        api.getPortfolio(),
-        api.getHoldings(),
-        api.getPerformance(),
+        api.getPortfolio(uid),
+        api.getHoldings(uid),
+        api.getPerformance(uid),
       ]);
       setSummary(sumRes);
       setHoldings(holdRes || []);

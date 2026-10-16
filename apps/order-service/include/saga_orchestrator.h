@@ -32,6 +32,8 @@ private:
     OutboxMessage createOutbox(const std::string& eventType, const std::string& aggregateType,
                                const std::string& aggregateId, const std::string& correlationId,
                                const Json::Value& payload);
+
+    void dispatchTradeEvents(const Trade& trade, const std::string& correlationId);
 };
 
 } // namespace stp::order

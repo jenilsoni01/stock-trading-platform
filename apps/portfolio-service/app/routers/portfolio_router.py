@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Header, HTTPException, Query
+from fastapi import APIRouter, Header, HTTPException, Query, Depends
 from typing import Optional, List
 from app.models import (
     PortfolioSummaryResponse,
@@ -26,14 +26,14 @@ def get_authenticated_user_id(
 
 @router.get("", response_model=PortfolioSummaryResponse)
 async def get_portfolio_summary(
-    user_id: str = Header(..., alias="X-User-Id", description="User ID propagated by Gateway")
+    user_id: str = Depends(get_authenticated_user_id)
 ):
     return await portfolio_service.get_portfolio_summary(user_id)
 
 
 @router.get("/holdings", response_model=List[HoldingItem])
 async def get_holdings(
-    user_id: str = Header(..., alias="X-User-Id", description="User ID propagated by Gateway")
+    user_id: str = Depends(get_authenticated_user_id)
 ):
     return await portfolio_service.get_holdings(user_id)
 
@@ -41,7 +41,7 @@ async def get_holdings(
 @router.get("/positions/{symbol}", response_model=PositionDetailResponse)
 async def get_position_detail(
     symbol: str,
-    user_id: str = Header(..., alias="X-User-Id", description="User ID propagated by Gateway")
+    user_id: str = Depends(get_authenticated_user_id)
 ):
     pos = await portfolio_service.get_position_detail(user_id, symbol)
     if not pos:
@@ -51,6 +51,6 @@ async def get_position_detail(
 
 @router.get("/performance", response_model=PerformanceResponse)
 async def get_performance(
-    user_id: str = Header(..., alias="X-User-Id", description="User ID propagated by Gateway")
+    user_id: str = Depends(get_authenticated_user_id)
 ):
     return await portfolio_service.get_performance(user_id)

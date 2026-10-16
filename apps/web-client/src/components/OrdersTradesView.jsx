@@ -13,11 +13,12 @@ export function OrdersTradesView() {
   const fetchData = async () => {
     if (!user) return;
     try {
+      const uid = user?.id || user?.userId;
       if (subTab === 'orders') {
-        const res = await api.getOrders(50);
+        const res = await api.getOrders(50, uid);
         setOrders(res.orders || (Array.isArray(res) ? res : []));
       } else {
-        const res = await api.getTrades(50);
+        const res = await api.getTrades(50, uid);
         setTrades(res.trades || (Array.isArray(res) ? res : []));
       }
     } catch (err) {
