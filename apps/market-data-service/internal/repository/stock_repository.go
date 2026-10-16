@@ -39,7 +39,12 @@ func NewStockRepository(db *mongo.Database) *StockRepository {
 
 // FindAll returns all active stocks
 func (r *StockRepository) FindAll(ctx context.Context) ([]Stock, error) {
-	filter := bson.M{"isActive": true}
+	filter := bson.M{
+		"$or": []bson.M{
+			{"isActive": true},
+			{"isActive": bson.M{"$exists": false}},
+		},
+	}
 	opts := options.Find().SetSort(bson.D{{Key: "symbol", Value: 1}})
 
 	cursor, err := r.collection.Find(ctx, filter, opts)
@@ -48,7 +53,7 @@ func (r *StockRepository) FindAll(ctx context.Context) ([]Stock, error) {
 	}
 	defer cursor.Close(ctx)
 
-	var stocks []Stock
+	stocks := make([]Stock, 0)
 	if err := cursor.All(ctx, &stocks); err != nil {
 		return nil, err
 	}
@@ -167,21 +172,21 @@ func (r *StockRepository) SeedIfEmpty(ctx context.Context, historyRepo *PriceHis
 	for _, s := range stocks {
 		filter := bson.M{"symbol": s.Symbol}
 		update := bson.M{
-			"$setOnInsert": bson.M{
+			"$set": bson.M{
 				"symbol":             s.Symbol,
 				"name":               s.Name,
 				"sector":             s.Sector,
+				"market":             s.Market,
 				"currentPricePaise":  s.CurrentPricePaise,
 				"previousPricePaise": s.PreviousPricePaise,
 				"dayHighPaise":       s.DayHighPaise,
 				"dayLowPaise":        s.DayLowPaise,
 				"volume":             s.Volume,
-				"isActive":           s.IsActive,
-				"createdAt":          s.CreatedAt,
+				"isActive":           true,
+				"updatedAt":          s.UpdatedAt,
 			},
-			"$set": bson.M{
-				"market":    s.Market,
-				"updatedAt": s.UpdatedAt,
+			"$setOnInsert": bson.M{
+				"createdAt": s.CreatedAt,
 			},
 		}
 		opts := options.Update().SetUpsert(true)
@@ -193,15 +198,19 @@ func (r *StockRepository) SeedIfEmpty(ctx context.Context, historyRepo *PriceHis
 			// Seed history only if not present
 			hist, _ := historyRepo.FindBySymbol(ctx, s.Symbol, 1)
 			if len(hist) == 0 {
+				var histDocs []interface{}
 				for i := 20; i >= 0; i-- {
 					t := now.Add(-time.Duration(i*5) * time.Minute)
 					priceOffset := int64((i%7 - 3) * 50)
-					historyRepo.Insert(ctx, PriceHistory{
+					histDocs = append(histDocs, PriceHistory{
 						Symbol:     s.Symbol,
 						PricePaise: s.CurrentPricePaise + priceOffset,
 						Volume:     s.Volume / 20,
 						Timestamp:  t,
 					})
+				}
+				if len(histDocs) > 0 {
+					_, _ = historyRepo.collection.InsertMany(ctx, histDocs)
 				}
 			}
 		}

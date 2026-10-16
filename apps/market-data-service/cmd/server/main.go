@@ -65,11 +65,13 @@ func main() {
 	marketService := service.NewMarketService(stockRepo, priceHistoryRepo)
 
 	// Auto-seed stocks and history if MongoDB is empty
-	if err := stockRepo.SeedIfEmpty(ctx, priceHistoryRepo); err != nil {
+	seedCtx, seedCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	if err := stockRepo.SeedIfEmpty(seedCtx, priceHistoryRepo); err != nil {
 		log.Printf("Warning: failed to seed stocks: %v", err)
 	} else {
 		log.Println("Stock catalog verification/seeding completed")
 	}
+	seedCancel()
 
 	// Start price simulator with configured interval (default 2s for live ticker experience)
 	simIntervalSec := 2

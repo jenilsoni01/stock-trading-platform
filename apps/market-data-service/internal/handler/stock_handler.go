@@ -28,6 +28,9 @@ func (h *StockHandler) ListStocks(c *gin.Context) {
 		})
 		return
 	}
+	if stocks == nil {
+		stocks = []repository.Stock{}
+	}
 	c.JSON(http.StatusOK, gin.H{
 		"stocks": stocks,
 		"count":  len(stocks),
@@ -102,6 +105,9 @@ func (h *StockHandler) SyncLivePrices(c *gin.Context) {
 	}
 
 	stocks, _ := h.marketService.ListStocks(c.Request.Context())
+	if stocks == nil {
+		stocks = []repository.Stock{}
+	}
 	c.JSON(http.StatusOK, gin.H{
 		"message":      "Live market data successfully synchronized",
 		"updatedCount": count,

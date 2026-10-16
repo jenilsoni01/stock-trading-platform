@@ -34,9 +34,11 @@ export function MarketWatch({ onSelectStockForOrder }) {
   const fetchStocks = async () => {
     try {
       const res = await api.getStocks();
-      if (res && res.stocks) {
+      const list = res?.stocks || (Array.isArray(res) ? res : []);
+      if (Array.isArray(list) && list.length > 0) {
         const newFlash = {};
-        res.stocks.forEach(s => {
+        list.forEach(s => {
+          if (!s || !s.symbol) return;
           const prev = prevPricesRef.current[s.symbol];
           if (prev !== undefined && s.currentPricePaise !== prev) {
             newFlash[s.symbol] = s.currentPricePaise > prev ? 'price-flash-up' : 'price-flash-down';
@@ -55,7 +57,7 @@ export function MarketWatch({ onSelectStockForOrder }) {
           }, 900);
         }
 
-        setStocks(res.stocks);
+        setStocks(list);
       }
     } catch (err) {
       console.error('Failed to load market stocks:', err);
@@ -121,13 +123,16 @@ export function MarketWatch({ onSelectStockForOrder }) {
     : (marketFilter === 'NSE' ? nseStocks : usStocks);
   const sectors = ['ALL', ...new Set(visibleForSectors.map(s => s.sector).filter(Boolean))];
 
-  const filteredStocks = stocks.filter(s => {
+  const filteredStocks = (stocks || []).filter(s => {
+    if (!s || !s.symbol) return false;
     const isUs = s.market === 'US';
     const matchesMarket = marketFilter === 'ALL' ||
                           (marketFilter === 'NSE' && !isUs) ||
                           (marketFilter === 'US' && isUs);
-    const matchesSearch = s.symbol.toLowerCase().includes(search.toLowerCase()) ||
-                          s.name.toLowerCase().includes(search.toLowerCase());
+    const sym = (s.symbol || '').toLowerCase();
+    const nm = (s.name || '').toLowerCase();
+    const term = (search || '').toLowerCase().trim();
+    const matchesSearch = !term || sym.includes(term) || nm.includes(term);
     const matchesSector = selectedSector === 'ALL' || s.sector === selectedSector;
     return matchesMarket && matchesSearch && matchesSector;
   });
@@ -385,7 +390,22 @@ export function MarketWatch({ onSelectStockForOrder }) {
             {filteredStocks.length === 0 ? (
               <tr>
                 <td colSpan="7" style={{ padding: '36px', textAlign: 'center', color: 'var(--text-muted)' }}>
-                  {loading ? 'Connecting to market feeds...' : 'No instruments found matching criteria.'}
+                  {loading ? (
+                    'Connecting to market feeds...'
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
+                      <span>No instruments found in current filter view.</span>
+                      <button 
+                        onClick={syncLiveQuotes}
+                        disabled={isSyncingLive}
+                        className="btn btn-primary"
+                        style={{ padding: '8px 18px', fontSize: '13px', display: 'inline-flex', alignItems: 'center', gap: '8px' }}
+                      >
+                        <RefreshCw size={14} className={isSyncingLive ? 'spin' : ''} />
+                        <span>{isSyncingLive ? 'Syncing Feeds...' : '⚡ Sync Live Exchange Catalog (35 Stocks)'}</span>
+                      </button>
+                    </div>
+                  )}
                 </td>
               </tr>
             ) : (
