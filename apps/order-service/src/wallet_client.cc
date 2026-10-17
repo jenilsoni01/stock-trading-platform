@@ -98,7 +98,7 @@ bool WalletClient::releaseReservation(const std::string& reservationId) {
 }
 
 bool WalletClient::creditCash(const std::string& userId, int64_t amountPaise, 
-                              const std::string& reason, const std::string& idempotencyKey) {
+                              const std::string& orderId, const std::string& idempotencyKey) {
     try {
         auto req = drogon::HttpRequest::newHttpRequest();
         req->setMethod(drogon::Post);
@@ -108,7 +108,7 @@ bool WalletClient::creditCash(const std::string& userId, int64_t amountPaise,
         Json::Value body;
         body["userId"] = userId;
         body["amountPaise"] = static_cast<Json::Int64>(amountPaise);
-        body["reason"] = reason;
+        body["orderId"] = orderId;
         body["idempotencyKey"] = idempotencyKey;
 
         Json::StreamWriterBuilder writer;

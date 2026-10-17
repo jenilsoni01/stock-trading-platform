@@ -70,8 +70,11 @@ void OrderController::createOrder(const drogon::HttpRequestPtr& req, std::functi
     orderReq.type = orderTypeFromString((*jsonPtr).get("orderType", "MARKET").asString());
     orderReq.quantity = (*jsonPtr).get("quantity", 0).asInt();
     
-    if ((*jsonPtr).isMember("limitPricePaise")) {
-        orderReq.limitPricePaise = (*jsonPtr)["limitPricePaise"].asInt64();
+    if ((*jsonPtr).isMember("limitPricePaise") && !(*jsonPtr)["limitPricePaise"].isNull()) {
+        int64_t lp = (*jsonPtr)["limitPricePaise"].asInt64();
+        if (lp > 0) {
+            orderReq.limitPricePaise = lp;
+        }
     }
 
     // Check Idempotency key from header or body

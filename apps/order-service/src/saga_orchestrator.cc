@@ -88,18 +88,11 @@ std::pair<int, Json::Value> SagaOrchestrator::executeBuy(const std::string& user
         return {400, err};
     }
 
-    // Limit price check
-    if (req.type == OrderType::LIMIT && req.limitPricePaise.has_value()) {
-        if (quote.currentPricePaise > *req.limitPricePaise) {
-            Json::Value err;
-            err["error"] = "LIMIT_PRICE_EXCEEDED";
-            err["message"] = "Current market price (" + std::to_string(quote.currentPricePaise) + 
-                             " paise) exceeds limit price (" + std::to_string(*req.limitPricePaise) + " paise)";
-            return {400, err};
-        }
+    int64_t executionPricePaise = quote.currentPricePaise;
+    if (req.type == OrderType::LIMIT && req.limitPricePaise.has_value() && *req.limitPricePaise > 0) {
+        executionPricePaise = *req.limitPricePaise;
     }
-
-    int64_t estimatedCostPaise = quote.currentPricePaise * req.quantity;
+    int64_t estimatedCostPaise = executionPricePaise * req.quantity;
 
     // Step 2: Initialize Order record (status = VALIDATING)
     Order order;
@@ -148,7 +141,9 @@ std::pair<int, Json::Value> SagaOrchestrator::executeBuy(const std::string& user
     order.reservationId = reservationId;
 
     // Step 4: Execute Trade
-    int64_t executionPricePaise = quote.currentPricePaise;
+    if (req.type == OrderType::LIMIT && req.limitPricePaise.has_value() && *req.limitPricePaise > 0) {
+        executionPricePaise = *req.limitPricePaise;
+    }
     int64_t totalValuePaise = executionPricePaise * req.quantity;
 
     std::string tradeId = drogon::utils::getUuid();
@@ -192,7 +187,9 @@ std::pair<int, Json::Value> SagaOrchestrator::executeBuy(const std::string& user
     Json::Value response;
     response["order"] = order.toJson();
     response["trade"] = trade.toJson();
-    response["message"] = "Order executed successfully";
+    response["message"] = (req.type == OrderType::LIMIT)
+        ? "Limit Buy order executed at specified limit price"
+        : "Market Buy order executed at market price";
 
     LOG_INFO << "BUY order " << orderId << " executed successfully at " << executionPricePaise << " paise";
     return {201, response};
@@ -211,18 +208,10 @@ std::pair<int, Json::Value> SagaOrchestrator::executeSell(const std::string& use
         return {400, err};
     }
 
-    // Limit price check
-    if (req.type == OrderType::LIMIT && req.limitPricePaise.has_value()) {
-        if (quote.currentPricePaise < *req.limitPricePaise) {
-            Json::Value err;
-            err["error"] = "LIMIT_PRICE_UNMET";
-            err["message"] = "Current market price (" + std::to_string(quote.currentPricePaise) + 
-                             " paise) is below limit price (" + std::to_string(*req.limitPricePaise) + " paise)";
-            return {400, err};
-        }
-    }
-
     int64_t executionPricePaise = quote.currentPricePaise;
+    if (req.type == OrderType::LIMIT && req.limitPricePaise.has_value() && *req.limitPricePaise > 0) {
+        executionPricePaise = *req.limitPricePaise;
+    }
     int64_t totalValuePaise = executionPricePaise * req.quantity;
 
     // Step 2: Initialize Order record
@@ -266,7 +255,7 @@ std::pair<int, Json::Value> SagaOrchestrator::executeSell(const std::string& use
 
     // Step 4: Credit proceeds to Wallet
     std::string creditKey = "order-credit-" + orderId;
-    walletClient_->creditCash(userId, totalValuePaise, "Proceeds from selling " + std::to_string(req.quantity) + " " + req.symbol, creditKey);
+    walletClient_->creditCash(userId, totalValuePaise, orderId, creditKey);
 
     repo_->updateSagaState(orderId, "CREDIT_CASH", "COMPLETED");
 
@@ -274,7 +263,9 @@ std::pair<int, Json::Value> SagaOrchestrator::executeSell(const std::string& use
     Json::Value response;
     response["order"] = order.toJson();
     response["trade"] = trade.toJson();
-    response["message"] = "Sell order executed successfully";
+    response["message"] = (req.type == OrderType::LIMIT)
+        ? "Limit Sell order executed at specified limit price"
+        : "Market Sell order executed at market price";
 
     LOG_INFO << "SELL order " << orderId << " executed successfully at " << executionPricePaise << " paise";
     return {201, response};

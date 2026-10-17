@@ -20,7 +20,7 @@ public:
     bool releaseReservation(const std::string& reservationId);
     
     bool creditCash(const std::string& userId, int64_t amountPaise, 
-                    const std::string& reason, const std::string& idempotencyKey);
+                    const std::string& orderId, const std::string& idempotencyKey);
 
 private:
     std::string walletServiceUrl_;

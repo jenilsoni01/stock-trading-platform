@@ -508,7 +508,7 @@ export function MarketWatch({ onSelectStockForOrder }) {
             }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px', fontSize: '12px', color: 'var(--text-dim)' }}>
                 <span>Price Timeline</span>
-                <span>{dataMode === 'live' ? 'Live Exchange Candlestick Range' : 'Intraday Simulated Ticks'}</span>
+                <span>Intraday Price History</span>
               </div>
               
               <div style={{ height: '140px', display: 'flex', alignItems: 'flex-end', gap: '4px' }}>

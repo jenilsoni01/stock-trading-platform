@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { api } from '../api';
 import { useAuth } from '../context/AuthContext';
-import { X, CheckCircle2, AlertCircle, Loader2, ShieldCheck } from 'lucide-react';
+import { X, CheckCircle2, AlertCircle, Loader2, Info } from 'lucide-react';
 
 export function OrderModal({ stock, initialSide = 'BUY', onClose, onOrderCompleted }) {
   const { user, wallet, refreshWallet } = useAuth();
@@ -9,17 +9,38 @@ export function OrderModal({ stock, initialSide = 'BUY', onClose, onOrderComplet
   const [orderType, setOrderType] = useState('MARKET');
   const [quantity, setQuantity] = useState(1);
   const [limitPrice, setLimitPrice] = useState((stock.currentPricePaise / 100).toFixed(2));
+  const [sharesOwned, setSharesOwned] = useState(0);
+  const [loadingPosition, setLoadingPosition] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
 
+  // Fetch user's current holdings for this stock to validate SELL orders
+  useEffect(() => {
+    const userId = user?.id || user?.userId;
+    if (userId) {
+      setLoadingPosition(true);
+      api.getPosition(stock.symbol, userId)
+        .then(pos => {
+          setSharesOwned(pos?.quantity || 0);
+        })
+        .catch(() => {
+          setSharesOwned(0);
+        })
+        .finally(() => {
+          setLoadingPosition(false);
+        });
+    }
+  }, [stock.symbol, user?.id, user?.userId]);
+
   const pricePerSharePaise = orderType === 'LIMIT' 
-    ? Math.round(parseFloat(limitPrice || '0') * 100) 
+    ? Math.max(1, Math.round(parseFloat(limitPrice || '0') * 100))
     : stock.currentPricePaise;
 
   const totalCostPaise = pricePerSharePaise * quantity;
 
   const formatInr = (paise) => {
+    if (!paise && paise !== 0) return '0.00';
     return (paise / 100).toLocaleString('en-IN', {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
@@ -28,6 +49,11 @@ export function OrderModal({ stock, initialSide = 'BUY', onClose, onOrderComplet
 
   const handleQuantityPreset = (qty) => {
     setQuantity(qty);
+  };
+
+  const handleLimitPricePreset = (multiplier) => {
+    const newPrice = ((stock.currentPricePaise * multiplier) / 100).toFixed(2);
+    setLimitPrice(newPrice);
   };
 
   const handleSubmit = async (e) => {
@@ -41,13 +67,26 @@ export function OrderModal({ stock, initialSide = 'BUY', onClose, onOrderComplet
     }
 
     if (orderType === 'LIMIT' && (!limitPrice || parseFloat(limitPrice) <= 0)) {
-      setError('Please enter a valid limit price');
+      setError('Please enter a valid target limit price');
       return;
     }
 
+    // BUY Validation: Check Available Wallet Balance
     if (side === 'BUY' && wallet && totalCostPaise > wallet.availableBalancePaise) {
-      setError(`Insufficient available balance (Required: ₹${formatInr(totalCostPaise)}, Available: ₹${formatInr(wallet.availableBalancePaise)})`);
+      setError(`Insufficient wallet balance. Required: ₹${formatInr(totalCostPaise)}, Available: ₹${formatInr(wallet.availableBalancePaise)}`);
       return;
+    }
+
+    // SELL Validation: Check Shares Held in Portfolio
+    if (side === 'SELL') {
+      if (sharesOwned <= 0) {
+        setError(`You do not own any shares of ${stock.symbol}. Buy shares before you can place a SELL order.`);
+        return;
+      }
+      if (quantity > sharesOwned) {
+        setError(`Cannot sell ${quantity} shares. You only hold ${sharesOwned} shares in your portfolio.`);
+        return;
+      }
     }
 
     setSubmitting(true);
@@ -66,6 +105,8 @@ export function OrderModal({ stock, initialSide = 'BUY', onClose, onOrderComplet
 
       const res = await api.createOrder(payload, idempotencyKey);
       setResult(res);
+
+      // Refresh wallet balance and position after execution
       await refreshWallet();
       if (onOrderCompleted) onOrderCompleted(res);
     } catch (err) {
@@ -74,6 +115,8 @@ export function OrderModal({ stock, initialSide = 'BUY', onClose, onOrderComplet
       setSubmitting(false);
     }
   };
+
+  const isSellDisabled = side === 'SELL' && sharesOwned <= 0;
 
   return (
     <div style={{
@@ -94,7 +137,7 @@ export function OrderModal({ stock, initialSide = 'BUY', onClose, onOrderComplet
         className="glass-card"
         style={{
           width: '100%',
-          maxWidth: '480px',
+          maxWidth: '490px',
           padding: '28px',
           background: '#121826',
           border: '1px solid rgba(255, 255, 255, 0.12)',
@@ -106,7 +149,7 @@ export function OrderModal({ stock, initialSide = 'BUY', onClose, onOrderComplet
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <h2 style={{ fontSize: '20px', fontWeight: 800 }}>Trade {stock.symbol}</h2>
-              <span className="badge badge-neutral">{stock.sector}</span>
+              <span className="badge badge-neutral">{stock.sector || 'Equities'}</span>
             </div>
             <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>{stock.name}</span>
           </div>
@@ -119,71 +162,86 @@ export function OrderModal({ stock, initialSide = 'BUY', onClose, onOrderComplet
           </button>
         </div>
 
-        {/* Success Feedback View */}
+        {/* Success Confirmation View */}
         {result ? (
-          <div style={{ textAlign: 'center', padding: '20px 0' }}>
+          <div style={{ textAlign: 'center', padding: '16px 0' }}>
             <div style={{
-              width: '60px',
-              height: '60px',
+              width: '56px',
+              height: '56px',
               borderRadius: '50%',
-              background: 'rgba(16, 185, 129, 0.15)',
-              color: 'var(--success)',
+              background: side === 'BUY' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(56, 189, 248, 0.15)',
+              color: side === 'BUY' ? '#10b981' : '#38bdf8',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              margin: '0 auto 16px auto',
+              margin: '0 auto 14px auto',
             }}>
-              <CheckCircle2 size={36} />
+              <CheckCircle2 size={34} />
             </div>
-            <h3 style={{ fontSize: '18px', fontWeight: 700, marginBottom: '8px' }}>
-              Order Executed Successfully!
+
+            <h3 style={{ fontSize: '18px', fontWeight: 700, marginBottom: '6px' }}>
+              {side === 'BUY' 
+                ? (orderType === 'LIMIT' ? 'Limit BUY Order Filled!' : 'Market BUY Order Executed!') 
+                : (orderType === 'LIMIT' ? 'Limit SELL Order Filled!' : 'Market SELL Order Executed!')}
             </h3>
-            <p style={{ color: 'var(--text-muted)', fontSize: '13px', marginBottom: '20px' }}>
-              Distributed Saga completed: Cash reserved, trade recorded in MySQL, and ledger updated.
+
+            <p style={{ color: 'var(--text-muted)', fontSize: '13px', marginBottom: '18px' }}>
+              {side === 'BUY'
+                ? `Bought ${result.trade?.quantity || quantity} shares of ${stock.symbol}. Cash reserved and settled from wallet.`
+                : `Sold ${result.trade?.quantity || quantity} shares of ${stock.symbol}. ₹${formatInr(result.trade?.totalValuePaise || totalCostPaise)} credited to your wallet balance.`}
             </p>
 
             <div style={{
-              background: 'rgba(0, 0, 0, 0.3)',
+              background: 'rgba(0, 0, 0, 0.35)',
               borderRadius: '10px',
               padding: '16px',
               textAlign: 'left',
               fontSize: '13px',
               display: 'flex',
               flexDirection: 'column',
-              gap: '8px',
+              gap: '10px',
               marginBottom: '20px',
+              border: '1px solid var(--border-color)',
             }}>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ color: 'var(--text-dim)' }}>Order ID:</span>
                 <span className="mono">{String(result.order?.orderId || result.orderId || 'CONFIRMED').slice(0, 18)}...</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: 'var(--text-dim)' }}>Trade Price:</span>
-                <span className="mono" style={{ fontWeight: 600 }}>₹{formatInr(result.trade?.pricePaise || stock.currentPricePaise)}</span>
+                <span style={{ color: 'var(--text-dim)' }}>Order Type:</span>
+                <span style={{ fontWeight: 600, color: side === 'BUY' ? 'var(--success)' : 'var(--danger)' }}>
+                  {orderType} {side}
+                </span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: 'var(--text-dim)' }}>Execution Price:</span>
+                <span className="mono" style={{ fontWeight: 600 }}>₹{formatInr(result.trade?.pricePaise || pricePerSharePaise)}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid var(--border-color)', paddingTop: '8px' }}>
                 <span style={{ color: 'var(--text-dim)' }}>Total Settlement:</span>
-                <span className="mono" style={{ fontWeight: 700, color: '#10b981' }}>₹{formatInr(result.trade?.totalValuePaise || totalCostPaise)}</span>
+                <span className="mono" style={{ fontWeight: 700, color: side === 'BUY' ? 'var(--danger)' : 'var(--success)' }}>
+                  {side === 'BUY' ? '-' : '+'}₹{formatInr(result.trade?.totalValuePaise || totalCostPaise)}
+                </span>
               </div>
             </div>
 
-            <button onClick={onClose} className="btn btn-primary" style={{ width: '100%', padding: '12px' }}>
+            <button onClick={onClose} className="btn btn-primary" style={{ width: '100%', padding: '12px', fontSize: '14px' }}>
               Done
             </button>
           </div>
         ) : (
-          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             {/* BUY / SELL Switch */}
             <div style={{ display: 'flex', background: 'var(--bg-input)', borderRadius: '10px', padding: '4px', border: '1px solid var(--border-color)' }}>
               <button
                 type="button"
-                onClick={() => setSide('BUY')}
+                onClick={() => { setSide('BUY'); setError(null); }}
                 style={{
                   flex: 1,
                   padding: '10px',
                   borderRadius: '8px',
                   fontWeight: 700,
-                  fontSize: '14px',
+                  fontSize: '13px',
                   border: 'none',
                   cursor: 'pointer',
                   background: side === 'BUY' ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)' : 'transparent',
@@ -195,13 +253,13 @@ export function OrderModal({ stock, initialSide = 'BUY', onClose, onOrderComplet
               </button>
               <button
                 type="button"
-                onClick={() => setSide('SELL')}
+                onClick={() => { setSide('SELL'); setError(null); }}
                 style={{
                   flex: 1,
                   padding: '10px',
                   borderRadius: '8px',
                   fontWeight: 700,
-                  fontSize: '14px',
+                  fontSize: '13px',
                   border: 'none',
                   cursor: 'pointer',
                   background: side === 'SELL' ? 'linear-gradient(135deg, #f43f5e 0%, #e11d48 100%)' : 'transparent',
@@ -212,6 +270,41 @@ export function OrderModal({ stock, initialSide = 'BUY', onClose, onOrderComplet
                 SELL
               </button>
             </div>
+
+            {/* Holdings Badge for Stock */}
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              background: 'rgba(255, 255, 255, 0.03)',
+              padding: '8px 12px',
+              borderRadius: '8px',
+              fontSize: '12px',
+              border: '1px solid var(--border-color)',
+            }}>
+              <span style={{ color: 'var(--text-dim)' }}>Your Portfolio Holdings:</span>
+              <span style={{ fontWeight: 700, color: sharesOwned > 0 ? '#38bdf8' : 'var(--text-muted)' }}>
+                {sharesOwned} {sharesOwned === 1 ? 'Share' : 'Shares'} Held
+              </span>
+            </div>
+
+            {/* Warn user if trying to SELL without holding shares */}
+            {side === 'SELL' && sharesOwned <= 0 && (
+              <div style={{
+                background: 'rgba(234, 179, 8, 0.1)',
+                border: '1px solid rgba(234, 179, 8, 0.3)',
+                borderRadius: '8px',
+                padding: '10px 12px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                color: '#fbbf24',
+                fontSize: '12px',
+              }}>
+                <Info size={16} />
+                <span>You do not own any shares of {stock.symbol}. Buy shares first before selling.</span>
+              </div>
+            )}
 
             {/* MARKET / LIMIT Switch */}
             <div style={{ display: 'flex', gap: '8px' }}>
@@ -253,20 +346,53 @@ export function OrderModal({ stock, initialSide = 'BUY', onClose, onOrderComplet
               </button>
             </div>
 
+            {/* Order Type Description */}
+            <div style={{ fontSize: '11px', color: 'var(--text-dim)', padding: '0 4px' }}>
+              {orderType === 'MARKET' ? (
+                <span>⚡ Executes instantly at current market quote: <strong>₹{formatInr(stock.currentPricePaise)}</strong></span>
+              ) : (
+                <span>🎯 Settle order at your specified limit price</span>
+              )}
+            </div>
+
             {/* Limit Price Input if LIMIT */}
             {orderType === 'LIMIT' && (
               <div>
-                <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-dim)', marginBottom: '6px' }}>
-                  LIMIT PRICE (₹)
-                </label>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                  <label style={{ fontSize: '12px', color: 'var(--text-dim)' }}>TARGET LIMIT PRICE (₹)</label>
+                  <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Market Quote: ₹{formatInr(stock.currentPricePaise)}</span>
+                </div>
                 <input
                   type="number"
                   step="0.05"
                   className="input-field"
                   value={limitPrice}
                   onChange={(e) => setLimitPrice(e.target.value)}
-                  placeholder="Enter target price..."
+                  placeholder="Enter target limit price..."
                 />
+                <div style={{ display: 'flex', gap: '6px', marginTop: '6px' }}>
+                  <button
+                    type="button"
+                    onClick={() => handleLimitPricePreset(0.99)}
+                    style={{ flex: 1, padding: '4px', fontSize: '11px', background: 'rgba(255, 255, 255, 0.04)', border: '1px solid var(--border-color)', color: 'var(--text-dim)', borderRadius: '4px', cursor: 'pointer' }}
+                  >
+                    -1%
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setLimitPrice((stock.currentPricePaise / 100).toFixed(2))}
+                    style={{ flex: 1, padding: '4px', fontSize: '11px', background: 'rgba(255, 255, 255, 0.04)', border: '1px solid var(--border-color)', color: 'var(--text-dim)', borderRadius: '4px', cursor: 'pointer' }}
+                  >
+                    Current Quote
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleLimitPricePreset(1.01)}
+                    style={{ flex: 1, padding: '4px', fontSize: '11px', background: 'rgba(255, 255, 255, 0.04)', border: '1px solid var(--border-color)', color: 'var(--text-dim)', borderRadius: '4px', cursor: 'pointer' }}
+                  >
+                    +1%
+                  </button>
+                </div>
               </div>
             )}
 
@@ -274,7 +400,15 @@ export function OrderModal({ stock, initialSide = 'BUY', onClose, onOrderComplet
             <div>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
                 <label style={{ fontSize: '12px', color: 'var(--text-dim)' }}>QUANTITY (SHARES)</label>
-                <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Lot size: 1</span>
+                {side === 'SELL' && sharesOwned > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setQuantity(sharesOwned)}
+                    style={{ fontSize: '11px', color: '#38bdf8', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                  >
+                    Max ({sharesOwned})
+                  </button>
+                )}
               </div>
               <input
                 type="number"
@@ -285,7 +419,7 @@ export function OrderModal({ stock, initialSide = 'BUY', onClose, onOrderComplet
                 onChange={(e) => setQuantity(Math.max(1, parseInt(e.target.value || '1', 10)))}
               />
               <div style={{ display: 'flex', gap: '6px', marginTop: '8px' }}>
-                {[1, 5, 10, 25, 50, 100].map((q) => (
+                {[1, 2, 5, 10, 25, 50].map((q) => (
                   <button
                     key={q}
                     type="button"
@@ -303,7 +437,7 @@ export function OrderModal({ stock, initialSide = 'BUY', onClose, onOrderComplet
                       cursor: 'pointer',
                     }}
                   >
-                    +{q}
+                    {q}
                   </button>
                 ))}
               </div>
@@ -311,18 +445,22 @@ export function OrderModal({ stock, initialSide = 'BUY', onClose, onOrderComplet
 
             {/* Cost Breakdown & Invariants Banner */}
             <div style={{
-              background: 'rgba(0, 0, 0, 0.3)',
+              background: 'rgba(0, 0, 0, 0.35)',
               borderRadius: '10px',
               padding: '14px',
               border: '1px solid var(--border-color)',
             }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', fontSize: '13px' }}>
-                <span style={{ color: 'var(--text-muted)' }}>Unit Price:</span>
+                <span style={{ color: 'var(--text-muted)' }}>Price per Share:</span>
                 <span className="mono">₹{formatInr(pricePerSharePaise)}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', fontSize: '13px' }}>
-                <span style={{ color: 'var(--text-muted)' }}>Estimated Total:</span>
-                <span className="mono" style={{ fontWeight: 700, color: '#ffffff' }}>₹{formatInr(totalCostPaise)}</span>
+                <span style={{ color: 'var(--text-muted)' }}>
+                  {side === 'BUY' ? 'Total Settlement Required:' : 'Total Proceeds to Receive:'}
+                </span>
+                <span className="mono" style={{ fontWeight: 700, color: side === 'BUY' ? '#ffffff' : '#10b981' }}>
+                  ₹{formatInr(totalCostPaise)}
+                </span>
               </div>
               {wallet && side === 'BUY' && (
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', borderTop: '1px solid var(--border-color)', paddingTop: '6px', marginTop: '6px' }}>
@@ -353,17 +491,25 @@ export function OrderModal({ stock, initialSide = 'BUY', onClose, onOrderComplet
             {/* Submit Button */}
             <button
               type="submit"
-              disabled={submitting}
+              disabled={submitting || isSellDisabled}
               className={side === 'BUY' ? 'btn btn-buy' : 'btn btn-sell'}
-              style={{ width: '100%', padding: '14px', fontSize: '15px' }}
+              style={{ 
+                width: '100%', 
+                padding: '14px', 
+                fontSize: '14px',
+                opacity: isSellDisabled ? 0.5 : 1,
+                cursor: isSellDisabled ? 'not-allowed' : 'pointer'
+              }}
             >
               {submitting ? (
                 <>
                   <Loader2 size={16} className="animate-spin" />
-                  Orchestrating Saga...
+                  Executing Saga...
                 </>
+              ) : isSellDisabled ? (
+                `No ${stock.symbol} Shares to Sell`
               ) : (
-                `Confirm ${side} ${quantity} ${stock.symbol} (₹${formatInr(totalCostPaise)})`
+                `Confirm ${orderType} ${side} (${quantity} Shares • ₹${formatInr(totalCostPaise)})`
               )}
             </button>
           </form>
