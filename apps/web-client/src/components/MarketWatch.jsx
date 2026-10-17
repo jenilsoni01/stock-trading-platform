@@ -8,11 +8,7 @@ import {
   ArrowUpRight, 
   ArrowDownRight, 
   RefreshCw, 
-  Activity, 
-  Globe, 
-  Zap, 
-  CheckCircle2, 
-  Clock 
+  Activity 
 } from 'lucide-react';
 
 export function MarketWatch({ onSelectStockForOrder }) {
@@ -24,10 +20,6 @@ export function MarketWatch({ onSelectStockForOrder }) {
   const [selectedSector, setSelectedSector] = useState('ALL');
   const [selectedStockHistory, setSelectedStockHistory] = useState(null);
   const [priceFlashMap, setPriceFlashMap] = useState({}); // { [symbol]: 'price-flash-up' | 'price-flash-down' }
-  const [dataMode, setDataMode] = useState('simulated'); // 'simulated' | 'live'
-  const [isSyncingLive, setIsSyncingLive] = useState(false);
-  const [lastLiveSyncTime, setLastLiveSyncTime] = useState(null);
-  const [syncStatusMsg, setSyncStatusMsg] = useState(null);
 
   const prevPricesRef = useRef({});
 
@@ -68,41 +60,9 @@ export function MarketWatch({ onSelectStockForOrder }) {
 
   useEffect(() => {
     fetchStocks();
-    // In simulated mode, poll every 2 seconds for high-frequency ticks.
-    // In live mode, poll every 8 seconds to reflect any background updates.
-    const pollInterval = dataMode === 'simulated' ? 2000 : 8000;
-    const interval = setInterval(fetchStocks, pollInterval);
+    const interval = setInterval(fetchStocks, 2500);
     return () => clearInterval(interval);
-  }, [dataMode]);
-
-  const handleToggleDataMode = async (mode) => {
-    setDataMode(mode);
-    if (mode === 'live') {
-      await syncLiveQuotes();
-    }
-  };
-
-  const syncLiveQuotes = async () => {
-    setIsSyncingLive(true);
-    setSyncStatusMsg('Contacting global exchange feeds via Yahoo Finance API...');
-    try {
-      const res = await api.syncLiveMarket();
-      if (res && res.stocks) {
-        setStocks(res.stocks);
-      } else {
-        await fetchStocks();
-      }
-      setLastLiveSyncTime(new Date().toLocaleTimeString());
-      setSyncStatusMsg(`Successfully synchronized ${res?.updatedCount || 35} live exchange instruments!`);
-      setTimeout(() => setSyncStatusMsg(null), 4500);
-    } catch (err) {
-      console.error('Failed to sync live quotes:', err);
-      setSyncStatusMsg('Live sync notice: Using resilient local ticker cache.');
-      setTimeout(() => setSyncStatusMsg(null), 4500);
-    } finally {
-      setIsSyncingLive(false);
-    }
-  };
+  }, []);
 
   const loadHistory = async (stock) => {
     try {
@@ -159,142 +119,45 @@ export function MarketWatch({ onSelectStockForOrder }) {
       <div className="glass-card" style={{ padding: '24px', position: 'relative', overflow: 'hidden' }}>
         <div style={{ position: 'relative', zIndex: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '18px' }}>
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
               <span className="pulse-live" style={{ 
                 width: '10px', 
                 height: '10px', 
                 borderRadius: '50%', 
-                background: dataMode === 'live' ? '#10b981' : '#38bdf8', 
+                background: '#10b981', 
                 display: 'inline-block' 
               }} />
               <span style={{ 
                 fontSize: '12px', 
                 fontWeight: 700, 
-                color: dataMode === 'live' ? '#10b981' : '#38bdf8', 
+                color: '#10b981', 
                 letterSpacing: '0.05em' 
               }}>
-                {dataMode === 'live' ? '🌐 LIVE REAL-WORLD MARKET DATA (YAHOO FINANCE)' : '⚡ SIMULATED INTRADAY FEED • 2-SECOND TICKS'}
+                ⚡ REAL-TIME TICKER STREAM • 2-SECOND TICK INTERVAL
               </span>
-              {lastLiveSyncTime && (
-                <span style={{ fontSize: '11px', color: 'var(--text-dim)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                  <Clock size={12} /> Last Live Sync: {lastLiveSyncTime}
-                </span>
-              )}
             </div>
 
             <h1 style={{ fontSize: '26px', fontWeight: 800, marginBottom: '6px' }}>
               Multi-Market Exchange Watchlist
             </h1>
             <p style={{ color: 'var(--text-muted)', fontSize: '13px', maxWidth: '640px' }}>
-              Trade Indian Blue-Chips (NSE) and US Global Tech Giants (NASDAQ/NYSE). Toggle between deterministic high-frequency simulation and real-world live exchange quotes.
+              Trade Indian Blue-Chips (NSE) and US Global Equities (NASDAQ/NYSE) with deterministic price ticks and instant execution.
             </p>
           </div>
 
-          {/* Toggle Switch: Simulated vs Live Data */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'flex-end' }}>
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              background: 'rgba(0, 0, 0, 0.5)',
-              padding: '4px',
-              borderRadius: '12px',
-              border: '1px solid var(--border-color)',
-            }}>
-              <button
-                onClick={() => handleToggleDataMode('simulated')}
-                style={{
-                  padding: '8px 16px',
-                  borderRadius: '8px',
-                  border: 'none',
-                  fontSize: '12px',
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  background: dataMode === 'simulated' ? 'linear-gradient(135deg, #38bdf8 0%, #0284c7 100%)' : 'transparent',
-                  color: dataMode === 'simulated' ? '#ffffff' : 'var(--text-muted)',
-                  transition: 'all 0.2s ease',
-                  boxShadow: dataMode === 'simulated' ? '0 2px 8px rgba(56, 189, 248, 0.4)' : 'none',
-                }}
-              >
-                <Zap size={14} /> Simulated Ticks (2s)
-              </button>
-              
-              <button
-                onClick={() => handleToggleDataMode('live')}
-                style={{
-                  padding: '8px 16px',
-                  borderRadius: '8px',
-                  border: 'none',
-                  fontSize: '12px',
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  background: dataMode === 'live' ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)' : 'transparent',
-                  color: dataMode === 'live' ? '#ffffff' : 'var(--text-muted)',
-                  transition: 'all 0.2s ease',
-                  boxShadow: dataMode === 'live' ? '0 2px 8px rgba(16, 185, 129, 0.4)' : 'none',
-                }}
-              >
-                <Globe size={14} /> Live Market Sync
-              </button>
-            </div>
-
-            {/* Quick Actions Bar */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <button 
-                onClick={syncLiveQuotes}
-                disabled={isSyncingLive}
-                className="btn btn-secondary"
-                style={{ 
-                  padding: '6px 12px', 
-                  fontSize: '12px', 
-                  display: 'inline-flex', 
-                  alignItems: 'center', 
-                  gap: '6px',
-                  borderColor: 'rgba(16, 185, 129, 0.3)',
-                  color: '#10b981'
-                }}
-                title="Fetch live quotes for all 35 instruments from Yahoo Finance"
-              >
-                <RefreshCw size={13} className={isSyncingLive ? 'spin' : ''} />
-                <span>{isSyncingLive ? 'Syncing...' : 'Sync Live Prices Now'}</span>
-              </button>
-
-              <button 
-                onClick={fetchStocks} 
-                className="btn btn-secondary"
-                style={{ padding: '6px 12px', fontSize: '12px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-                title="Refresh from local database"
-              >
-                <RefreshCw size={13} className={loading ? 'spin' : ''} />
-                <span>Refresh</span>
-              </button>
-            </div>
+          {/* Quick Refresh */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <button 
+              onClick={fetchStocks} 
+              className="btn btn-secondary"
+              style={{ padding: '8px 16px', fontSize: '13px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+              title="Refresh from local database"
+            >
+              <RefreshCw size={14} className={loading ? 'spin' : ''} />
+              <span>Refresh Quotes</span>
+            </button>
           </div>
         </div>
-
-        {/* Live sync banner notification */}
-        {syncStatusMsg && (
-          <div style={{
-            marginTop: '16px',
-            padding: '10px 14px',
-            borderRadius: '8px',
-            background: 'rgba(16, 185, 129, 0.1)',
-            border: '1px solid rgba(16, 185, 129, 0.3)',
-            color: '#10b981',
-            fontSize: '12px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-          }}>
-            <CheckCircle2 size={16} />
-            <span>{syncStatusMsg}</span>
-          </div>
-        )}
       </div>
 
       {/* Market Region Filter Tabs (All / NSE / US) */}
@@ -396,13 +259,12 @@ export function MarketWatch({ onSelectStockForOrder }) {
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
                       <span>No instruments found in current filter view.</span>
                       <button 
-                        onClick={syncLiveQuotes}
-                        disabled={isSyncingLive}
-                        className="btn btn-primary"
+                        onClick={() => { setSearch(''); setSelectedSector('ALL'); setMarketFilter('ALL'); fetchStocks(); }}
+                        className="btn btn-secondary"
                         style={{ padding: '8px 18px', fontSize: '13px', display: 'inline-flex', alignItems: 'center', gap: '8px' }}
                       >
-                        <RefreshCw size={14} className={isSyncingLive ? 'spin' : ''} />
-                        <span>{isSyncingLive ? 'Syncing Feeds...' : '⚡ Sync Live Exchange Catalog (35 Stocks)'}</span>
+                        <RefreshCw size={14} className={loading ? 'spin' : ''} />
+                        <span>Reset Filters & Refresh</span>
                       </button>
                     </div>
                   )}
