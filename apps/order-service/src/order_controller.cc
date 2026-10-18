@@ -66,15 +66,33 @@ void OrderController::createOrder(const drogon::HttpRequestPtr& req, std::functi
 
     CreateOrderRequest orderReq;
     orderReq.symbol = (*jsonPtr).get("symbol", "").asString();
-    orderReq.side = orderSideFromString((*jsonPtr).get("side", "BUY").asString());
-    orderReq.type = orderTypeFromString((*jsonPtr).get("orderType", "MARKET").asString());
+    
+    std::string sideStr = "BUY";
+    if ((*jsonPtr).isMember("side")) {
+        sideStr = (*jsonPtr)["side"].asString();
+    }
+    orderReq.side = orderSideFromString(sideStr);
+
+    std::string typeStr = "MARKET";
+    if ((*jsonPtr).isMember("orderType")) {
+        typeStr = (*jsonPtr)["orderType"].asString();
+    } else if ((*jsonPtr).isMember("order_type")) {
+        typeStr = (*jsonPtr)["order_type"].asString();
+    } else if ((*jsonPtr).isMember("type")) {
+        typeStr = (*jsonPtr)["type"].asString();
+    }
+    orderReq.type = orderTypeFromString(typeStr);
     orderReq.quantity = (*jsonPtr).get("quantity", 0).asInt();
     
     if ((*jsonPtr).isMember("limitPricePaise") && !(*jsonPtr)["limitPricePaise"].isNull()) {
         int64_t lp = (*jsonPtr)["limitPricePaise"].asInt64();
-        if (lp > 0) {
-            orderReq.limitPricePaise = lp;
-        }
+        if (lp > 0) orderReq.limitPricePaise = lp;
+    } else if ((*jsonPtr).isMember("limit_price_paise") && !(*jsonPtr)["limit_price_paise"].isNull()) {
+        int64_t lp = (*jsonPtr)["limit_price_paise"].asInt64();
+        if (lp > 0) orderReq.limitPricePaise = lp;
+    } else if ((*jsonPtr).isMember("limitPrice") && !(*jsonPtr)["limitPrice"].isNull()) {
+        double lp = (*jsonPtr)["limitPrice"].asDouble();
+        if (lp > 0) orderReq.limitPricePaise = static_cast<int64_t>(std::round(lp * 100.0));
     }
 
     // Check Idempotency key from header or body

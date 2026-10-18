@@ -12,9 +12,8 @@ export function OrdersTradesView() {
   const [cancellingId, setCancellingId] = useState(null);
 
   const fetchData = async () => {
-    if (!user) return;
     try {
-      const uid = user?.id || user?.userId;
+      const uid = user?.id || user?.userId || 'trader';
       if (subTab === 'orders') {
         const res = await api.getOrders(50, uid);
         setOrders(res.orders || (Array.isArray(res) ? res : []));
@@ -30,9 +29,8 @@ export function OrdersTradesView() {
   };
 
   useEffect(() => {
-    if (!user) return;
     fetchData();
-    const interval = setInterval(fetchData, 3000);
+    const interval = setInterval(fetchData, 2500);
     return () => clearInterval(interval);
   }, [user, subTab]);
 

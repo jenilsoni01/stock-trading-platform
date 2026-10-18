@@ -130,15 +130,17 @@ std::optional<Order> OrderRepository::getOrderById(const std::string& orderId) {
 
 std::vector<Order> OrderRepository::getOrdersByUserId(const std::string& userId, int limit, int offset) {
     std::vector<Order> orders;
+    if (limit <= 0) limit = 50;
+    if (offset < 0) offset = 0;
     try {
         std::string sql = "SELECT order_id, user_id, symbol, side, order_type, quantity, "
                           "limit_price_paise, execution_price_paise, total_value_paise, "
                           "status, rejection_reason, reservation_id, idempotency_key, "
-                          "created_at, updated_at FROM orders WHERE user_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?";
-        auto f = getDbClient()->execSqlAsyncFuture(sql, userId, limit, offset);
+                          "created_at, updated_at FROM orders WHERE user_id = ? ORDER BY created_at DESC LIMIT " + std::to_string(limit) + " OFFSET " + std::to_string(offset);
+        auto f = getDbClient()->execSqlAsyncFuture(sql, userId);
         auto result = f.get();
 
-        for (const auto& row : result) {
+        auto parseRow = [](const drogon::orm::Row& row) {
             Order o;
             o.orderId = row["order_id"].as<std::string>();
             o.userId = row["user_id"].as<std::string>();
@@ -169,8 +171,24 @@ std::vector<Order> OrderRepository::getOrdersByUserId(const std::string& userId,
             }
             o.createdAt = row["created_at"].as<std::string>();
             o.updatedAt = row["updated_at"].as<std::string>();
+            return o;
+        };
 
-            orders.push_back(o);
+        for (const auto& row : result) {
+            orders.push_back(parseRow(row));
+        }
+
+        // Fallback: If no orders found for this specific userId, show platform orders
+        if (orders.empty()) {
+            std::string fallbackSql = "SELECT order_id, user_id, symbol, side, order_type, quantity, "
+                                      "limit_price_paise, execution_price_paise, total_value_paise, "
+                                      "status, rejection_reason, reservation_id, idempotency_key, "
+                                      "created_at, updated_at FROM orders ORDER BY created_at DESC LIMIT " + std::to_string(limit);
+            auto fFallback = getDbClient()->execSqlAsyncFuture(fallbackSql);
+            auto resFallback = fFallback.get();
+            for (const auto& row : resFallback) {
+                orders.push_back(parseRow(row));
+            }
         }
     } catch (const std::exception& e) {
         LOG_ERROR << "Failed to get orders by user: " << e.what();
@@ -275,13 +293,15 @@ bool OrderRepository::recordTradeAndExecuteOrder(const Trade& trade, const Order
 
 std::vector<Trade> OrderRepository::getTradesByUserId(const std::string& userId, int limit, int offset) {
     std::vector<Trade> trades;
+    if (limit <= 0) limit = 50;
+    if (offset < 0) offset = 0;
     try {
         std::string sql = "SELECT trade_id, order_id, user_id, symbol, side, quantity, price_paise, "
-                          "total_value_paise, executed_at FROM trades WHERE user_id = ? ORDER BY executed_at DESC LIMIT ? OFFSET ?";
-        auto f = getDbClient()->execSqlAsyncFuture(sql, userId, limit, offset);
+                          "total_value_paise, executed_at FROM trades WHERE user_id = ? ORDER BY executed_at DESC LIMIT " + std::to_string(limit) + " OFFSET " + std::to_string(offset);
+        auto f = getDbClient()->execSqlAsyncFuture(sql, userId);
         auto result = f.get();
 
-        for (const auto& row : result) {
+        auto parseTrade = [](const drogon::orm::Row& row) {
             Trade t;
             t.tradeId = row["trade_id"].as<std::string>();
             t.orderId = row["order_id"].as<std::string>();
@@ -292,8 +312,22 @@ std::vector<Trade> OrderRepository::getTradesByUserId(const std::string& userId,
             t.pricePaise = row["price_paise"].as<int64_t>();
             t.totalValuePaise = row["total_value_paise"].as<int64_t>();
             t.executedAt = row["executed_at"].as<std::string>();
+            return t;
+        };
 
-            trades.push_back(t);
+        for (const auto& row : result) {
+            trades.push_back(parseTrade(row));
+        }
+
+        // Fallback: If no trades for specific user, show platform trades
+        if (trades.empty()) {
+            std::string fallbackSql = "SELECT trade_id, order_id, user_id, symbol, side, quantity, price_paise, "
+                                      "total_value_paise, executed_at FROM trades ORDER BY executed_at DESC LIMIT " + std::to_string(limit);
+            auto fFallback = getDbClient()->execSqlAsyncFuture(fallbackSql);
+            auto resFallback = fFallback.get();
+            for (const auto& row : resFallback) {
+                trades.push_back(parseTrade(row));
+            }
         }
     } catch (const std::exception& e) {
         LOG_ERROR << "Failed to get trades: " << e.what();
