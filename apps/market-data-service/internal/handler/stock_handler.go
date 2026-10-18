@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"github.com/stock-trading-platform/market-data-service/internal/repository"
 	"github.com/stock-trading-platform/market-data-service/internal/service"
 )
 
