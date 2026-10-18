@@ -18,6 +18,7 @@ public:
     bool createOrder(const Order& order, const std::string& sagaStep, const OutboxMessage& outbox);
     std::optional<Order> getOrderById(const std::string& orderId);
     std::vector<Order> getOrdersByUserId(const std::string& userId, int limit = 50, int offset = 0);
+    std::vector<Order> getPendingLimitOrders(int limit = 50);
     bool updateOrderStatus(const std::string& orderId, OrderStatus status, 
                            const std::optional<int64_t>& executionPrice = std::nullopt,
                            const std::optional<int64_t>& totalValue = std::nullopt,
@@ -36,6 +37,7 @@ public:
                         const std::string& orderId, int statusCode, const Json::Value& body);
 
     // Outbox operations
+    bool insertOutboxMessage(const OutboxMessage& outbox);
     std::vector<OutboxMessage> getPendingOutboxMessages(int limit = 50);
     bool markOutboxPublished(const std::string& outboxId);
     bool markOutboxFailed(const std::string& outboxId);

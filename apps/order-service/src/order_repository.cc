@@ -18,7 +18,7 @@ bool OrderRepository::createOrder(const Order& order, const std::string& sagaSte
         // Insert order
         std::string sqlOrder = "INSERT INTO orders (order_id, user_id, symbol, side, order_type, quantity, "
                                "limit_price_paise, status, rejection_reason, reservation_id, idempotency_key) "
-                               "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                               "VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULLIF(?, ''), NULLIF(?, ''), NULLIF(?, ''))";
         
         auto fOrder = getDbClient()->execSqlAsyncFuture(
             sqlOrder,
@@ -420,6 +420,66 @@ bool OrderRepository::updateSagaState(const std::string& sagaId, const std::stri
         LOG_ERROR << "Failed to update saga state: " << e.what();
         return false;
     }
+}
+
+bool OrderRepository::insertOutboxMessage(const OutboxMessage& outbox) {
+    try {
+        Json::StreamWriterBuilder writer;
+        std::string payloadStr = Json::writeString(writer, outbox.payload);
+
+        std::string sqlOutbox = "INSERT INTO outbox_messages (outbox_id, event_id, event_type, aggregate_type, "
+                                "aggregate_id, correlation_id, event_version, payload, status) "
+                                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'PENDING')";
+        auto fOutbox = getDbClient()->execSqlAsyncFuture(
+            sqlOutbox,
+            outbox.outboxId,
+            outbox.eventId,
+            outbox.eventType,
+            outbox.aggregateType,
+            outbox.aggregateId,
+            outbox.correlationId,
+            outbox.eventVersion,
+            payloadStr
+        );
+        fOutbox.get();
+        return true;
+    } catch (const std::exception& e) {
+        LOG_ERROR << "Failed to insert outbox message: " << e.what();
+        return false;
+    }
+}
+
+std::vector<Order> OrderRepository::getPendingLimitOrders(int limit) {
+    std::vector<Order> orders;
+    try {
+        std::string sql = "SELECT order_id, user_id, symbol, side, order_type, quantity, "
+                          "limit_price_paise, execution_price_paise, total_value_paise, "
+                          "status, rejection_reason, reservation_id, idempotency_key, "
+                          "created_at, updated_at FROM orders WHERE status = 'PENDING' ORDER BY created_at ASC LIMIT ?";
+        auto f = getDbClient()->execSqlAsyncFuture(sql, limit);
+        auto result = f.get();
+
+        for (const auto& row : result) {
+            Order o;
+            o.orderId = row["order_id"].as<std::string>();
+            o.userId = row["user_id"].as<std::string>();
+            o.symbol = row["symbol"].as<std::string>();
+            o.side = orderSideFromString(row["side"].as<std::string>());
+            o.type = orderTypeFromString(row["order_type"].as<std::string>());
+            o.quantity = row["quantity"].as<int>();
+            if (!row["limit_price_paise"].isNull() && row["limit_price_paise"].as<int64_t>() > 0) {
+                o.limitPricePaise = row["limit_price_paise"].as<int64_t>();
+            }
+            if (!row["reservation_id"].isNull()) {
+                o.reservationId = row["reservation_id"].as<std::string>();
+            }
+            o.status = OrderStatus::PENDING;
+            orders.push_back(o);
+        }
+    } catch (const std::exception& e) {
+        LOG_ERROR << "Failed to get pending limit orders: " << e.what();
+    }
+    return orders;
 }
 
 } // namespace stp::order

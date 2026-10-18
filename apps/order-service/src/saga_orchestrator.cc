@@ -88,11 +88,12 @@ std::pair<int, Json::Value> SagaOrchestrator::executeBuy(const std::string& user
         return {400, err};
     }
 
-    int64_t executionPricePaise = quote.currentPricePaise;
-    if (req.type == OrderType::LIMIT && req.limitPricePaise.has_value() && *req.limitPricePaise > 0) {
-        executionPricePaise = *req.limitPricePaise;
-    }
-    int64_t estimatedCostPaise = executionPricePaise * req.quantity;
+    int64_t marketPricePaise = quote.currentPricePaise;
+    bool isLimit = (req.type == OrderType::LIMIT && req.limitPricePaise.has_value() && *req.limitPricePaise > 0);
+    int64_t targetLimitPrice = isLimit ? *req.limitPricePaise : marketPricePaise;
+
+    // Use target limit price for reservation calculation if limit, otherwise market price
+    int64_t estimatedCostPaise = targetLimitPrice * req.quantity;
 
     // Step 2: Initialize Order record (status = VALIDATING)
     Order order;
@@ -123,13 +124,6 @@ std::pair<int, Json::Value> SagaOrchestrator::executeBuy(const std::string& user
         repo_->updateOrderStatus(orderId, OrderStatus::REJECTED, std::nullopt, std::nullopt, resResult.message);
         repo_->updateSagaState(orderId, "RESERVE_CASH", "FAILED", "", resResult.message);
 
-        // Outbox event for order rejection
-        Json::Value rejectPayload = order.toJson();
-        rejectPayload["status"] = "REJECTED";
-        rejectPayload["rejectionReason"] = resResult.message;
-        OutboxMessage rejectOutbox = createOutbox("orders.rejected", "Order", orderId, correlationId, rejectPayload);
-        // Note: outbox message could also be inserted if needed
-
         Json::Value err;
         err["error"] = "INSUFFICIENT_FUNDS";
         err["message"] = "Cash reservation failed: " + resResult.message;
@@ -140,10 +134,27 @@ std::pair<int, Json::Value> SagaOrchestrator::executeBuy(const std::string& user
     std::string reservationId = resResult.reservationId;
     order.reservationId = reservationId;
 
-    // Step 4: Execute Trade
-    if (req.type == OrderType::LIMIT && req.limitPricePaise.has_value() && *req.limitPricePaise > 0) {
-        executionPricePaise = *req.limitPricePaise;
+    // Financial Rule for Limit BUY:
+    // If target limit price is LESS than current market price, market hasn't dropped to target yet!
+    // The order must remain PENDING in the Order Book with funds reserved.
+    if (isLimit && marketPricePaise > targetLimitPrice) {
+        order.status = OrderStatus::PENDING;
+        repo_->updateOrderStatus(orderId, OrderStatus::PENDING, std::nullopt, std::nullopt, "", reservationId);
+        repo_->updateSagaState(orderId, "AWAITING_PRICE", "PENDING", reservationId);
+
+        Json::Value pendingPayload = order.toJson();
+        OutboxMessage pendingOutbox = createOutbox("orders.pending", "Order", orderId, correlationId, pendingPayload);
+        repo_->insertOutboxMessage(pendingOutbox);
+
+        Json::Value response;
+        response["order"] = order.toJson();
+        response["message"] = "Limit BUY order placed in Order Book. Funds reserved. Awaiting price drop to target.";
+        LOG_INFO << "Limit BUY order " << orderId << " placed as PENDING awaiting price <= " << targetLimitPrice;
+        return {201, response};
     }
+
+    // Step 4: Execute Trade (Market BUY at marketPricePaise, or Limit BUY where marketPricePaise <= targetLimitPrice)
+    int64_t executionPricePaise = marketPricePaise;
     int64_t totalValuePaise = executionPricePaise * req.quantity;
 
     std::string tradeId = drogon::utils::getUuid();
@@ -188,8 +199,8 @@ std::pair<int, Json::Value> SagaOrchestrator::executeBuy(const std::string& user
     response["order"] = order.toJson();
     response["trade"] = trade.toJson();
     response["message"] = (req.type == OrderType::LIMIT)
-        ? "Limit Buy order executed at specified limit price"
-        : "Market Buy order executed at market price";
+        ? "Limit Buy order executed at market price"
+        : "Market Buy order executed at live market price";
 
     LOG_INFO << "BUY order " << orderId << " executed successfully at " << executionPricePaise << " paise";
     return {201, response};
@@ -208,13 +219,41 @@ std::pair<int, Json::Value> SagaOrchestrator::executeSell(const std::string& use
         return {400, err};
     }
 
-    int64_t executionPricePaise = quote.currentPricePaise;
-    if (req.type == OrderType::LIMIT && req.limitPricePaise.has_value() && *req.limitPricePaise > 0) {
-        executionPricePaise = *req.limitPricePaise;
+    int64_t marketPricePaise = quote.currentPricePaise;
+    bool isLimit = (req.type == OrderType::LIMIT && req.limitPricePaise.has_value() && *req.limitPricePaise > 0);
+    int64_t targetLimitPrice = isLimit ? *req.limitPricePaise : marketPricePaise;
+
+    // Financial Rule for Limit SELL:
+    // If target limit price is GREATER than current market price, market hasn't risen to target yet!
+    // The order must remain PENDING in the Order Book.
+    if (isLimit && marketPricePaise < targetLimitPrice) {
+        Order order;
+        order.orderId = orderId;
+        order.userId = userId;
+        order.symbol = req.symbol;
+        order.side = OrderSide::SELL;
+        order.type = OrderType::LIMIT;
+        order.quantity = req.quantity;
+        order.limitPricePaise = req.limitPricePaise;
+        order.status = OrderStatus::PENDING;
+        order.idempotencyKey = req.idempotencyKey;
+
+        Json::Value pendingPayload = order.toJson();
+        OutboxMessage pendingOutbox = createOutbox("orders.pending", "Order", orderId, correlationId, pendingPayload);
+
+        repo_->createOrder(order, "AWAITING_PRICE", pendingOutbox);
+
+        Json::Value response;
+        response["order"] = order.toJson();
+        response["message"] = "Limit SELL order placed in Order Book. Awaiting price rise to target.";
+        LOG_INFO << "Limit SELL order " << orderId << " placed as PENDING awaiting price >= " << targetLimitPrice;
+        return {201, response};
     }
+
+    // Step 2: Initialize Order record for instant execution (Market SELL or marketable Limit SELL)
+    int64_t executionPricePaise = marketPricePaise;
     int64_t totalValuePaise = executionPricePaise * req.quantity;
 
-    // Step 2: Initialize Order record
     Order order;
     order.orderId = orderId;
     order.userId = userId;
@@ -240,14 +279,17 @@ std::pair<int, Json::Value> SagaOrchestrator::executeSell(const std::string& use
     trade.totalValuePaise = totalValuePaise;
     trade.executedAt = getCurrentIsoTime();
 
-    // Step 3: Insert initial outbox and execute trade
+    // Create unique outbox messages for order creation and trade execution
+    Json::Value createdPayload = order.toJson();
+    OutboxMessage createdOutbox = createOutbox("orders.created", "Order", orderId, correlationId, createdPayload);
+
     Json::Value orderExecPayload = order.toJson();
     OutboxMessage orderExecOutbox = createOutbox("orders.executed", "Order", orderId, correlationId, orderExecPayload);
 
     Json::Value tradeExecPayload = trade.toJson();
     OutboxMessage tradeExecOutbox = createOutbox("trades.executed", "Trade", tradeId, correlationId, tradeExecPayload);
 
-    repo_->createOrder(order, "CREDIT_CASH", orderExecOutbox);
+    repo_->createOrder(order, "CREDIT_CASH", createdOutbox);
     repo_->recordTradeAndExecuteOrder(trade, order, orderExecOutbox, tradeExecOutbox);
 
     // Asynchronously dispatch trade projection to portfolio-service and notification-service
@@ -264,8 +306,8 @@ std::pair<int, Json::Value> SagaOrchestrator::executeSell(const std::string& use
     response["order"] = order.toJson();
     response["trade"] = trade.toJson();
     response["message"] = (req.type == OrderType::LIMIT)
-        ? "Limit Sell order executed at specified limit price"
-        : "Market Sell order executed at market price";
+        ? "Limit Sell order executed at market price"
+        : "Market Sell order executed at live market price";
 
     LOG_INFO << "SELL order " << orderId << " executed successfully at " << executionPricePaise << " paise";
     return {201, response};
@@ -306,8 +348,7 @@ std::pair<int, Json::Value> SagaOrchestrator::cancelOrder(const std::string& use
     Json::Value cancelPayload = order.toJson();
     cancelPayload["status"] = "CANCELLED";
     OutboxMessage cancelOutbox = createOutbox("orders.cancelled", "Order", orderId, drogon::utils::getUuid(), cancelPayload);
-    // write to outbox
-    repo_->createOrder(order, "CANCEL", cancelOutbox);
+    repo_->insertOutboxMessage(cancelOutbox);
 
     Json::Value res;
     res["orderId"] = orderId;
@@ -371,6 +412,74 @@ void SagaOrchestrator::dispatchTradeEvents(const Trade& trade, const std::string
     } catch (const std::exception& e) {
         LOG_WARN << "Exception dispatching notification: " << e.what();
     }
+}
+
+int SagaOrchestrator::processPendingLimitOrders() {
+    auto pending = repo_->getPendingLimitOrders(50);
+    if (pending.empty()) return 0;
+
+    int matchedCount = 0;
+    for (const auto& order : pending) {
+        if (!order.limitPricePaise.has_value() || *order.limitPricePaise <= 0) continue;
+
+        QuoteInfo quote = marketDataClient_->getQuote(order.symbol);
+        if (!quote.valid || quote.currentPricePaise <= 0) continue;
+
+        int64_t marketPrice = quote.currentPricePaise;
+        int64_t targetLimit = *order.limitPricePaise;
+
+        bool shouldFill = false;
+        if (order.side == OrderSide::BUY && marketPrice <= targetLimit) {
+            shouldFill = true;
+        } else if (order.side == OrderSide::SELL && marketPrice >= targetLimit) {
+            shouldFill = true;
+        }
+
+        if (!shouldFill) continue;
+
+        int64_t execPrice = marketPrice;
+        int64_t totalVal = execPrice * order.quantity;
+        std::string tradeId = drogon::utils::getUuid();
+        std::string correlationId = drogon::utils::getUuid();
+
+        Trade trade;
+        trade.tradeId = tradeId;
+        trade.orderId = order.orderId;
+        trade.userId = order.userId;
+        trade.symbol = order.symbol;
+        trade.side = order.side;
+        trade.quantity = order.quantity;
+        trade.pricePaise = execPrice;
+        trade.totalValuePaise = totalVal;
+        trade.executedAt = getCurrentIsoTime();
+
+        Order updatedOrder = order;
+        updatedOrder.status = OrderStatus::EXECUTED;
+        updatedOrder.executionPricePaise = execPrice;
+        updatedOrder.totalValuePaise = totalVal;
+
+        OutboxMessage orderExecOutbox = createOutbox("orders.executed", "Order", order.orderId, correlationId, updatedOrder.toJson());
+        OutboxMessage tradeExecOutbox = createOutbox("trades.executed", "Trade", tradeId, correlationId, trade.toJson());
+
+        repo_->recordTradeAndExecuteOrder(trade, updatedOrder, orderExecOutbox, tradeExecOutbox);
+        dispatchTradeEvents(trade, correlationId);
+
+        if (order.side == OrderSide::BUY) {
+            if (!order.reservationId.empty()) {
+                walletClient_->captureReservation(order.reservationId, totalVal);
+            }
+            repo_->updateSagaState(order.orderId, "LIMIT_MATCH", "COMPLETED", order.reservationId);
+        } else {
+            std::string creditKey = "order-credit-" + order.orderId;
+            walletClient_->creditCash(order.userId, totalVal, order.orderId, creditKey);
+            repo_->updateSagaState(order.orderId, "LIMIT_MATCH", "COMPLETED");
+        }
+
+        LOG_INFO << "Pending limit order " << order.orderId << " (" << orderSideToString(order.side) 
+                 << " " << order.symbol << ") filled at " << execPrice << " paise!";
+        matchedCount++;
+    }
+    return matchedCount;
 }
 
 } // namespace stp::order

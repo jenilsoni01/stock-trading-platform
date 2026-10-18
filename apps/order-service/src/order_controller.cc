@@ -118,6 +118,10 @@ void OrderController::listOrders(const drogon::HttpRequestPtr& req, std::functio
         if (!req->getParameter("offset").empty()) offset = std::stoi(req->getParameter("offset"));
     } catch (...) {}
 
+    try {
+        orchestrator_->processPendingLimitOrders();
+    } catch (...) {}
+
     auto orders = repository_->getOrdersByUserId(userId, limit, offset);
 
     Json::Value array(Json::arrayValue);

@@ -1,14 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../api';
 import { useAuth } from '../context/AuthContext';
-import { ListOrdered, TrendingUp, RefreshCw, XCircle, CheckCircle2, Clock } from 'lucide-react';
+import { ListOrdered, RefreshCw, Clock, Ban, CheckCircle2 } from 'lucide-react';
 
 export function OrdersTradesView() {
-  const { user, openAuthModal } = useAuth();
+  const { user, openAuthModal, refreshWallet } = useAuth();
   const [subTab, setSubTab] = useState('orders'); // 'orders' or 'trades'
   const [orders, setOrders] = useState([]);
   const [trades, setTrades] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [cancellingId, setCancellingId] = useState(null);
 
   const fetchData = async () => {
     if (!user) return;
@@ -29,17 +30,23 @@ export function OrdersTradesView() {
   };
 
   useEffect(() => {
-    if (user) {
-      fetchData();
-    }
+    if (!user) return;
+    fetchData();
+    const interval = setInterval(fetchData, 3000);
+    return () => clearInterval(interval);
   }, [user, subTab]);
 
   const handleCancel = async (orderId) => {
+    if (!orderId) return;
+    setCancellingId(orderId);
     try {
       await api.cancelOrder(orderId);
+      if (refreshWallet) await refreshWallet();
       await fetchData();
     } catch (err) {
       alert(`Could not cancel order: ${err.message}`);
+    } finally {
+      setCancellingId(null);
     }
   };
 
@@ -67,6 +74,12 @@ export function OrdersTradesView() {
     switch (status) {
       case 'EXECUTED':
         return <span className="badge badge-success">EXECUTED</span>;
+      case 'PENDING':
+        return (
+          <span className="badge badge-warning" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+            <Clock size={11} /> PENDING
+          </span>
+        );
       case 'VALIDATING':
       case 'ACCEPTED':
       case 'EXECUTING':
@@ -104,7 +117,7 @@ export function OrdersTradesView() {
 
         <button onClick={fetchData} className="btn btn-secondary" style={{ padding: '8px 14px', fontSize: '12px' }}>
           <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
-          Refresh
+          Auto-Refreshing (3s)
         </button>
       </div>
 
@@ -118,17 +131,18 @@ export function OrdersTradesView() {
                 <th style={{ padding: '14px 18px', fontSize: '12px', color: 'var(--text-dim)', fontWeight: 600 }}>SYMBOL</th>
                 <th style={{ padding: '14px 18px', fontSize: '12px', color: 'var(--text-dim)', fontWeight: 600 }}>SIDE & TYPE</th>
                 <th style={{ padding: '14px 18px', fontSize: '12px', color: 'var(--text-dim)', fontWeight: 600, textAlign: 'right' }}>QUANTITY</th>
-                <th style={{ padding: '14px 18px', fontSize: '12px', color: 'var(--text-dim)', fontWeight: 600, textAlign: 'right' }}>EXEC PRICE</th>
+                <th style={{ padding: '14px 18px', fontSize: '12px', color: 'var(--text-dim)', fontWeight: 600, textAlign: 'right' }}>PRICE (EXEC / LMT)</th>
                 <th style={{ padding: '14px 18px', fontSize: '12px', color: 'var(--text-dim)', fontWeight: 600, textAlign: 'right' }}>TOTAL VALUE</th>
                 <th style={{ padding: '14px 18px', fontSize: '12px', color: 'var(--text-dim)', fontWeight: 600, textAlign: 'center' }}>STATUS</th>
-                <th style={{ padding: '14px 18px', fontSize: '12px', color: 'var(--text-dim)', fontWeight: 600, textAlign: 'right' }}>SUBMITTED</th>
+                <th style={{ padding: '14px 18px', fontSize: '12px', color: 'var(--text-dim)', fontWeight: 600, textAlign: 'center' }}>ACTION</th>
+                <th style={{ padding: '14px 18px', fontSize: '12px', color: 'var(--text-dim)', fontWeight: 600, textAlign: 'right' }}>TIME</th>
               </tr>
             </thead>
             <tbody>
               {orders.length === 0 ? (
                 <tr>
-                  <td colSpan="8" style={{ padding: '36px', textAlign: 'center', color: 'var(--text-muted)' }}>
-                    {loading ? 'Fetching orders from C++/MySQL Order Service...' : 'No orders recorded yet.'}
+                  <td colSpan="9" style={{ padding: '36px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                    {loading ? 'Fetching orders from Order Service...' : 'No orders recorded yet. Place a Market or Limit order to get started.'}
                   </td>
                 </tr>
               ) : (
@@ -148,7 +162,7 @@ export function OrdersTradesView() {
                           {o.side}
                         </span>
                         <span className="badge badge-neutral" style={{ fontSize: '10px' }}>
-                          {o.orderType}
+                          {o.orderType || o.type}
                         </span>
                       </div>
                     </td>
@@ -157,19 +171,57 @@ export function OrdersTradesView() {
                     </td>
                     <td style={{ padding: '14px 18px', textAlign: 'right' }}>
                       <span className="mono">
-                        {o.executionPricePaise ? `₹${formatInr(o.executionPricePaise)}` : (o.limitPricePaise ? `₹${formatInr(o.limitPricePaise)} (LMT)` : 'Market')}
+                        {o.executionPricePaise ? (
+                          `₹${formatInr(o.executionPricePaise)}`
+                        ) : o.limitPricePaise ? (
+                          <span style={{ color: '#38bdf8' }}>₹{formatInr(o.limitPricePaise)} (LMT)</span>
+                        ) : (
+                          'Market'
+                        )}
                       </span>
                     </td>
                     <td style={{ padding: '14px 18px', textAlign: 'right' }}>
                       <span className="mono" style={{ fontWeight: 700, color: '#ffffff' }}>
-                        {o.totalValuePaise ? `₹${formatInr(o.totalValuePaise)}` : '—'}
+                        {o.totalValuePaise ? (
+                          `₹${formatInr(o.totalValuePaise)}`
+                        ) : o.limitPricePaise ? (
+                          `₹${formatInr(o.limitPricePaise * o.quantity)} (Est)`
+                        ) : (
+                          '—'
+                        )}
                       </span>
                     </td>
                     <td style={{ padding: '14px 18px', textAlign: 'center' }}>
                       {getStatusBadge(o.status)}
                     </td>
+                    <td style={{ padding: '14px 18px', textAlign: 'center' }}>
+                      {o.status === 'PENDING' ? (
+                        <button
+                          onClick={() => handleCancel(o.orderId || o.id)}
+                          disabled={cancellingId === (o.orderId || o.id)}
+                          style={{
+                            background: 'rgba(244, 63, 94, 0.12)',
+                            color: '#f43f5e',
+                            border: '1px solid rgba(244, 63, 94, 0.35)',
+                            padding: '4px 10px',
+                            borderRadius: '6px',
+                            fontSize: '11px',
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                          }}
+                        >
+                          <Ban size={12} />
+                          {cancellingId === (o.orderId || o.id) ? 'Cancelling...' : 'Cancel'}
+                        </button>
+                      ) : (
+                        <span style={{ color: 'var(--text-dim)', fontSize: '12px' }}>—</span>
+                      )}
+                    </td>
                     <td style={{ padding: '14px 18px', textAlign: 'right', fontSize: '12px', color: 'var(--text-dim)' }}>
-                      {o.createdAt ? new Date(o.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}
+                      {o.createdAt ? new Date(o.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '—'}
                     </td>
                   </tr>
                 ))
@@ -198,7 +250,7 @@ export function OrdersTradesView() {
               {trades.length === 0 ? (
                 <tr>
                   <td colSpan="7" style={{ padding: '36px', textAlign: 'center', color: 'var(--text-muted)' }}>
-                    {loading ? 'Fetching trades from MySQL...' : 'No trade fills recorded yet.'}
+                    {loading ? 'Fetching executed trades from MySQL...' : 'No trade fills recorded yet.'}
                   </td>
                 </tr>
               ) : (
@@ -224,7 +276,9 @@ export function OrdersTradesView() {
                       <span className="mono" style={{ fontWeight: 600 }}>₹{formatInr(t.pricePaise)}</span>
                     </td>
                     <td style={{ padding: '14px 18px', textAlign: 'right' }}>
-                      <span className="mono" style={{ fontWeight: 700, color: '#10b981' }}>₹{formatInr(t.totalValuePaise)}</span>
+                      <span className="mono" style={{ fontWeight: 700, color: t.side === 'BUY' ? '#ffffff' : '#10b981' }}>
+                        ₹{formatInr(t.totalValuePaise)}
+                      </span>
                     </td>
                     <td style={{ padding: '14px 18px', textAlign: 'right', fontSize: '12px', color: 'var(--text-dim)' }}>
                       {t.executedAt ? new Date(t.executedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '—'}

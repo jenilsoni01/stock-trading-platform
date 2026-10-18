@@ -18,6 +18,9 @@ public:
     // Process an order submission through the full distributed saga
     std::pair<int, Json::Value> processOrder(const std::string& userId, const CreateOrderRequest& req);
 
+    // Evaluate and execute any active pending limit orders whose target price has been reached
+    int processPendingLimitOrders();
+
     // Cancel order
     std::pair<int, Json::Value> cancelOrder(const std::string& userId, const std::string& orderId);
 

@@ -10,7 +10,9 @@ class OrderController : public drogon::HttpController<OrderController> {
 public:
     METHOD_LIST_BEGIN
     ADD_METHOD_TO(OrderController::createOrder, "/api/v1/orders", drogon::Post, drogon::Options);
+    ADD_METHOD_TO(OrderController::createOrder, "/api/v1/orders/", drogon::Post, drogon::Options);
     ADD_METHOD_TO(OrderController::listOrders, "/api/v1/orders", drogon::Get, drogon::Options);
+    ADD_METHOD_TO(OrderController::listOrders, "/api/v1/orders/", drogon::Get, drogon::Options);
     ADD_METHOD_TO(OrderController::getOrder, "/api/v1/orders/{1}", drogon::Get, drogon::Options);
     ADD_METHOD_TO(OrderController::cancelOrder, "/api/v1/orders/{1}/cancel", drogon::Post, drogon::Options);
     METHOD_LIST_END

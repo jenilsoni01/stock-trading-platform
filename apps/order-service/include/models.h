@@ -38,6 +38,7 @@ enum class OrderStatus {
     CREATED,
     VALIDATING,
     ACCEPTED,
+    PENDING,
     EXECUTING,
     EXECUTED,
     REJECTED,
@@ -50,6 +51,7 @@ inline std::string orderStatusToString(OrderStatus status) {
         case OrderStatus::CREATED: return "CREATED";
         case OrderStatus::VALIDATING: return "VALIDATING";
         case OrderStatus::ACCEPTED: return "ACCEPTED";
+        case OrderStatus::PENDING: return "PENDING";
         case OrderStatus::EXECUTING: return "EXECUTING";
         case OrderStatus::EXECUTED: return "EXECUTED";
         case OrderStatus::REJECTED: return "REJECTED";
@@ -63,6 +65,7 @@ inline OrderStatus orderStatusFromString(const std::string& str) {
     if (str == "CREATED") return OrderStatus::CREATED;
     if (str == "VALIDATING") return OrderStatus::VALIDATING;
     if (str == "ACCEPTED") return OrderStatus::ACCEPTED;
+    if (str == "PENDING") return OrderStatus::PENDING;
     if (str == "EXECUTING") return OrderStatus::EXECUTING;
     if (str == "EXECUTED") return OrderStatus::EXECUTED;
     if (str == "REJECTED") return OrderStatus::REJECTED;
