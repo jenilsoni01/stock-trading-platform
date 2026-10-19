@@ -1,8 +1,73 @@
 #include "order_repository.h"
 #include <trantor/utils/Logger.h>
+#include <trantor/utils/Date.h>
 #include <sstream>
 
 namespace stp::order {
+
+static inline std::string safeDate(const drogon::orm::Row& row, const char* col) {
+    if (row[col].isNull()) return "";
+    try {
+        return row[col].as<std::string>();
+    } catch (...) {
+        try {
+            return row[col].as<trantor::Date>().toCustomedFormattedString("%Y-%m-%d %H:%M:%S");
+        } catch (...) {
+            return "";
+        }
+    }
+}
+
+static inline Order parseOrderRow(const drogon::orm::Row& row) {
+    Order o;
+    try {
+        if (!row["order_id"].isNull()) o.orderId = row["order_id"].as<std::string>();
+        if (!row["user_id"].isNull()) o.userId = row["user_id"].as<std::string>();
+        if (!row["symbol"].isNull()) o.symbol = row["symbol"].as<std::string>();
+        if (!row["side"].isNull()) o.side = orderSideFromString(row["side"].as<std::string>());
+        if (!row["order_type"].isNull()) o.type = orderTypeFromString(row["order_type"].as<std::string>());
+        if (!row["quantity"].isNull()) o.quantity = row["quantity"].as<int>();
+        
+        if (!row["limit_price_paise"].isNull() && row["limit_price_paise"].as<int64_t>() > 0) {
+            o.limitPricePaise = row["limit_price_paise"].as<int64_t>();
+        }
+        if (!row["execution_price_paise"].isNull() && row["execution_price_paise"].as<int64_t>() > 0) {
+            o.executionPricePaise = row["execution_price_paise"].as<int64_t>();
+        }
+        if (!row["total_value_paise"].isNull() && row["total_value_paise"].as<int64_t>() > 0) {
+            o.totalValuePaise = row["total_value_paise"].as<int64_t>();
+        }
+
+        if (!row["status"].isNull()) o.status = orderStatusFromString(row["status"].as<std::string>());
+        if (!row["rejection_reason"].isNull()) o.rejectionReason = row["rejection_reason"].as<std::string>();
+        if (!row["reservation_id"].isNull()) o.reservationId = row["reservation_id"].as<std::string>();
+        if (!row["idempotency_key"].isNull()) o.idempotencyKey = row["idempotency_key"].as<std::string>();
+
+        o.createdAt = safeDate(row, "created_at");
+        o.updatedAt = safeDate(row, "updated_at");
+    } catch (const std::exception& e) {
+        LOG_WARN << "parseOrderRow exception: " << e.what();
+    }
+    return o;
+}
+
+static inline Trade parseTradeRow(const drogon::orm::Row& row) {
+    Trade t;
+    try {
+        if (!row["trade_id"].isNull()) t.tradeId = row["trade_id"].as<std::string>();
+        if (!row["order_id"].isNull()) t.orderId = row["order_id"].as<std::string>();
+        if (!row["user_id"].isNull()) t.userId = row["user_id"].as<std::string>();
+        if (!row["symbol"].isNull()) t.symbol = row["symbol"].as<std::string>();
+        if (!row["side"].isNull()) t.side = orderSideFromString(row["side"].as<std::string>());
+        if (!row["quantity"].isNull()) t.quantity = row["quantity"].as<int>();
+        if (!row["price_paise"].isNull()) t.pricePaise = row["price_paise"].as<int64_t>();
+        if (!row["total_value_paise"].isNull()) t.totalValuePaise = row["total_value_paise"].as<int64_t>();
+        t.executedAt = safeDate(row, "executed_at");
+    } catch (const std::exception& e) {
+        LOG_WARN << "parseTradeRow exception: " << e.what();
+    }
+    return t;
+}
 
 OrderRepository::OrderRepository(drogon::orm::DbClientPtr dbClient)
     : dbClient_(std::move(dbClient)) {}
@@ -81,7 +146,9 @@ std::optional<Order> OrderRepository::getOrderById(const std::string& orderId) {
         std::string sql = "SELECT order_id, user_id, symbol, side, order_type, quantity, "
                           "limit_price_paise, execution_price_paise, total_value_paise, "
                           "status, rejection_reason, reservation_id, idempotency_key, "
-                          "created_at, updated_at FROM orders WHERE order_id = ?";
+                          "COALESCE(DATE_FORMAT(created_at, '%Y-%m-%d %H:%i:%s'), '') AS created_at, "
+                          "COALESCE(DATE_FORMAT(updated_at, '%Y-%m-%d %H:%i:%s'), '') AS updated_at "
+                          "FROM orders WHERE order_id = ?";
         auto f = getDbClient()->execSqlAsyncFuture(sql, orderId);
         auto result = f.get();
 
@@ -89,39 +156,7 @@ std::optional<Order> OrderRepository::getOrderById(const std::string& orderId) {
             return std::nullopt;
         }
 
-        auto row = result[0];
-        Order o;
-        o.orderId = row["order_id"].as<std::string>();
-        o.userId = row["user_id"].as<std::string>();
-        o.symbol = row["symbol"].as<std::string>();
-        o.side = orderSideFromString(row["side"].as<std::string>());
-        o.type = orderTypeFromString(row["order_type"].as<std::string>());
-        o.quantity = row["quantity"].as<int>();
-        
-        if (!row["limit_price_paise"].isNull() && row["limit_price_paise"].as<int64_t>() > 0) {
-            o.limitPricePaise = row["limit_price_paise"].as<int64_t>();
-        }
-        if (!row["execution_price_paise"].isNull() && row["execution_price_paise"].as<int64_t>() > 0) {
-            o.executionPricePaise = row["execution_price_paise"].as<int64_t>();
-        }
-        if (!row["total_value_paise"].isNull() && row["total_value_paise"].as<int64_t>() > 0) {
-            o.totalValuePaise = row["total_value_paise"].as<int64_t>();
-        }
-
-        o.status = orderStatusFromString(row["status"].as<std::string>());
-        if (!row["rejection_reason"].isNull()) {
-            o.rejectionReason = row["rejection_reason"].as<std::string>();
-        }
-        if (!row["reservation_id"].isNull()) {
-            o.reservationId = row["reservation_id"].as<std::string>();
-        }
-        if (!row["idempotency_key"].isNull()) {
-            o.idempotencyKey = row["idempotency_key"].as<std::string>();
-        }
-        o.createdAt = row["created_at"].as<std::string>();
-        o.updatedAt = row["updated_at"].as<std::string>();
-
-        return o;
+        return parseOrderRow(result[0]);
     } catch (const std::exception& e) {
         LOG_ERROR << "Failed to get order: " << e.what();
         return std::nullopt;
@@ -133,61 +168,45 @@ std::vector<Order> OrderRepository::getOrdersByUserId(const std::string& userId,
     if (limit <= 0) limit = 50;
     if (offset < 0) offset = 0;
     try {
-        std::string sql = "SELECT order_id, user_id, symbol, side, order_type, quantity, "
-                          "limit_price_paise, execution_price_paise, total_value_paise, "
-                          "status, rejection_reason, reservation_id, idempotency_key, "
-                          "created_at, updated_at FROM orders WHERE user_id = ? ORDER BY created_at DESC LIMIT " + std::to_string(limit) + " OFFSET " + std::to_string(offset);
-        auto f = getDbClient()->execSqlAsyncFuture(sql, userId);
-        auto result = f.get();
-
-        auto parseRow = [](const drogon::orm::Row& row) {
-            Order o;
-            o.orderId = row["order_id"].as<std::string>();
-            o.userId = row["user_id"].as<std::string>();
-            o.symbol = row["symbol"].as<std::string>();
-            o.side = orderSideFromString(row["side"].as<std::string>());
-            o.type = orderTypeFromString(row["order_type"].as<std::string>());
-            o.quantity = row["quantity"].as<int>();
-            
-            if (!row["limit_price_paise"].isNull() && row["limit_price_paise"].as<int64_t>() > 0) {
-                o.limitPricePaise = row["limit_price_paise"].as<int64_t>();
+        std::string sql;
+        if (!userId.empty()) {
+            sql = "SELECT order_id, user_id, symbol, side, order_type, quantity, "
+                  "limit_price_paise, execution_price_paise, total_value_paise, "
+                  "status, rejection_reason, reservation_id, idempotency_key, "
+                  "COALESCE(DATE_FORMAT(created_at, '%Y-%m-%d %H:%i:%s'), '') AS created_at, "
+                  "COALESCE(DATE_FORMAT(updated_at, '%Y-%m-%d %H:%i:%s'), '') AS updated_at "
+                  "FROM orders WHERE user_id = ? ORDER BY created_at DESC LIMIT " + std::to_string(limit) + " OFFSET " + std::to_string(offset);
+            auto f = getDbClient()->execSqlAsyncFuture(sql, userId);
+            auto result = f.get();
+            for (const auto& row : result) {
+                orders.push_back(parseOrderRow(row));
             }
-            if (!row["execution_price_paise"].isNull() && row["execution_price_paise"].as<int64_t>() > 0) {
-                o.executionPricePaise = row["execution_price_paise"].as<int64_t>();
+        } else {
+            sql = "SELECT order_id, user_id, symbol, side, order_type, quantity, "
+                  "limit_price_paise, execution_price_paise, total_value_paise, "
+                  "status, rejection_reason, reservation_id, idempotency_key, "
+                  "COALESCE(DATE_FORMAT(created_at, '%Y-%m-%d %H:%i:%s'), '') AS created_at, "
+                  "COALESCE(DATE_FORMAT(updated_at, '%Y-%m-%d %H:%i:%s'), '') AS updated_at "
+                  "FROM orders ORDER BY created_at DESC LIMIT " + std::to_string(limit) + " OFFSET " + std::to_string(offset);
+            auto f = getDbClient()->execSqlAsyncFuture(sql);
+            auto result = f.get();
+            for (const auto& row : result) {
+                orders.push_back(parseOrderRow(row));
             }
-            if (!row["total_value_paise"].isNull() && row["total_value_paise"].as<int64_t>() > 0) {
-                o.totalValuePaise = row["total_value_paise"].as<int64_t>();
-            }
-
-            o.status = orderStatusFromString(row["status"].as<std::string>());
-            if (!row["rejection_reason"].isNull()) {
-                o.rejectionReason = row["rejection_reason"].as<std::string>();
-            }
-            if (!row["reservation_id"].isNull()) {
-                o.reservationId = row["reservation_id"].as<std::string>();
-            }
-            if (!row["idempotency_key"].isNull()) {
-                o.idempotencyKey = row["idempotency_key"].as<std::string>();
-            }
-            o.createdAt = row["created_at"].as<std::string>();
-            o.updatedAt = row["updated_at"].as<std::string>();
-            return o;
-        };
-
-        for (const auto& row : result) {
-            orders.push_back(parseRow(row));
         }
 
         // Fallback: If no orders found for this specific userId, show platform orders
-        if (orders.empty()) {
+        if (orders.empty() && !userId.empty()) {
             std::string fallbackSql = "SELECT order_id, user_id, symbol, side, order_type, quantity, "
                                       "limit_price_paise, execution_price_paise, total_value_paise, "
                                       "status, rejection_reason, reservation_id, idempotency_key, "
-                                      "created_at, updated_at FROM orders ORDER BY created_at DESC LIMIT " + std::to_string(limit);
+                                      "COALESCE(DATE_FORMAT(created_at, '%Y-%m-%d %H:%i:%s'), '') AS created_at, "
+                                      "COALESCE(DATE_FORMAT(updated_at, '%Y-%m-%d %H:%i:%s'), '') AS updated_at "
+                                      "FROM orders ORDER BY created_at DESC LIMIT " + std::to_string(limit);
             auto fFallback = getDbClient()->execSqlAsyncFuture(fallbackSql);
             auto resFallback = fFallback.get();
             for (const auto& row : resFallback) {
-                orders.push_back(parseRow(row));
+                orders.push_back(parseOrderRow(row));
             }
         }
     } catch (const std::exception& e) {
@@ -296,37 +315,36 @@ std::vector<Trade> OrderRepository::getTradesByUserId(const std::string& userId,
     if (limit <= 0) limit = 50;
     if (offset < 0) offset = 0;
     try {
-        std::string sql = "SELECT trade_id, order_id, user_id, symbol, side, quantity, price_paise, "
-                          "total_value_paise, executed_at FROM trades WHERE user_id = ? ORDER BY executed_at DESC LIMIT " + std::to_string(limit) + " OFFSET " + std::to_string(offset);
-        auto f = getDbClient()->execSqlAsyncFuture(sql, userId);
-        auto result = f.get();
-
-        auto parseTrade = [](const drogon::orm::Row& row) {
-            Trade t;
-            t.tradeId = row["trade_id"].as<std::string>();
-            t.orderId = row["order_id"].as<std::string>();
-            t.userId = row["user_id"].as<std::string>();
-            t.symbol = row["symbol"].as<std::string>();
-            t.side = orderSideFromString(row["side"].as<std::string>());
-            t.quantity = row["quantity"].as<int>();
-            t.pricePaise = row["price_paise"].as<int64_t>();
-            t.totalValuePaise = row["total_value_paise"].as<int64_t>();
-            t.executedAt = row["executed_at"].as<std::string>();
-            return t;
-        };
-
-        for (const auto& row : result) {
-            trades.push_back(parseTrade(row));
+        std::string sql;
+        if (!userId.empty()) {
+            sql = "SELECT trade_id, order_id, user_id, symbol, side, quantity, price_paise, "
+                  "total_value_paise, COALESCE(DATE_FORMAT(executed_at, '%Y-%m-%d %H:%i:%s'), '') AS executed_at "
+                  "FROM trades WHERE user_id = ? ORDER BY executed_at DESC LIMIT " + std::to_string(limit) + " OFFSET " + std::to_string(offset);
+            auto f = getDbClient()->execSqlAsyncFuture(sql, userId);
+            auto result = f.get();
+            for (const auto& row : result) {
+                trades.push_back(parseTradeRow(row));
+            }
+        } else {
+            sql = "SELECT trade_id, order_id, user_id, symbol, side, quantity, price_paise, "
+                  "total_value_paise, COALESCE(DATE_FORMAT(executed_at, '%Y-%m-%d %H:%i:%s'), '') AS executed_at "
+                  "FROM trades ORDER BY executed_at DESC LIMIT " + std::to_string(limit) + " OFFSET " + std::to_string(offset);
+            auto f = getDbClient()->execSqlAsyncFuture(sql);
+            auto result = f.get();
+            for (const auto& row : result) {
+                trades.push_back(parseTradeRow(row));
+            }
         }
 
         // Fallback: If no trades for specific user, show platform trades
-        if (trades.empty()) {
+        if (trades.empty() && !userId.empty()) {
             std::string fallbackSql = "SELECT trade_id, order_id, user_id, symbol, side, quantity, price_paise, "
-                                      "total_value_paise, executed_at FROM trades ORDER BY executed_at DESC LIMIT " + std::to_string(limit);
+                                      "total_value_paise, COALESCE(DATE_FORMAT(executed_at, '%Y-%m-%d %H:%i:%s'), '') AS executed_at "
+                                      "FROM trades ORDER BY executed_at DESC LIMIT " + std::to_string(limit);
             auto fFallback = getDbClient()->execSqlAsyncFuture(fallbackSql);
             auto resFallback = fFallback.get();
             for (const auto& row : resFallback) {
-                trades.push_back(parseTrade(row));
+                trades.push_back(parseTradeRow(row));
             }
         }
     } catch (const std::exception& e) {
@@ -380,31 +398,35 @@ bool OrderRepository::saveIdempotency(const std::string& key, const std::string&
 
 std::vector<OutboxMessage> OrderRepository::getPendingOutboxMessages(int limit) {
     std::vector<OutboxMessage> messages;
+    if (limit <= 0) limit = 50;
     try {
         std::string sql = "SELECT outbox_id, event_id, event_type, aggregate_type, aggregate_id, correlation_id, "
-                          "causation_id, event_version, payload, retry_count, created_at "
-                          "FROM outbox_messages WHERE status = 'PENDING' ORDER BY created_at ASC LIMIT ?";
-        auto f = getDbClient()->execSqlAsyncFuture(sql, limit);
+                          "causation_id, event_version, payload, retry_count, "
+                          "COALESCE(DATE_FORMAT(created_at, '%Y-%m-%d %H:%i:%s'), '') AS created_at "
+                          "FROM outbox_messages WHERE status = 'PENDING' ORDER BY created_at ASC LIMIT " + std::to_string(limit);
+        auto f = getDbClient()->execSqlAsyncFuture(sql);
         auto result = f.get();
 
         for (const auto& row : result) {
             OutboxMessage m;
-            m.outboxId = row["outbox_id"].as<std::string>();
-            m.eventId = row["event_id"].as<std::string>();
-            m.eventType = row["event_type"].as<std::string>();
-            m.aggregateType = row["aggregate_type"].as<std::string>();
-            m.aggregateId = row["aggregate_id"].as<std::string>();
-            m.correlationId = row["correlation_id"].as<std::string>();
-            m.eventVersion = row["event_version"].as<int>();
+            if (!row["outbox_id"].isNull()) m.outboxId = row["outbox_id"].as<std::string>();
+            if (!row["event_id"].isNull()) m.eventId = row["event_id"].as<std::string>();
+            if (!row["event_type"].isNull()) m.eventType = row["event_type"].as<std::string>();
+            if (!row["aggregate_type"].isNull()) m.aggregateType = row["aggregate_type"].as<std::string>();
+            if (!row["aggregate_id"].isNull()) m.aggregateId = row["aggregate_id"].as<std::string>();
+            if (!row["correlation_id"].isNull()) m.correlationId = row["correlation_id"].as<std::string>();
+            if (!row["event_version"].isNull()) m.eventVersion = row["event_version"].as<int>();
             
-            std::string payloadStr = row["payload"].as<std::string>();
-            Json::CharReaderBuilder reader;
-            std::istringstream s(payloadStr);
-            std::string errs;
-            Json::parseFromStream(reader, s, &m.payload, &errs);
+            if (!row["payload"].isNull()) {
+                std::string payloadStr = row["payload"].as<std::string>();
+                Json::CharReaderBuilder reader;
+                std::istringstream s(payloadStr);
+                std::string errs;
+                Json::parseFromStream(reader, s, &m.payload, &errs);
+            }
 
-            m.retryCount = row["retry_count"].as<int>();
-            m.createdAt = row["created_at"].as<std::string>();
+            if (!row["retry_count"].isNull()) m.retryCount = row["retry_count"].as<int>();
+            m.createdAt = safeDate(row, "created_at");
             messages.push_back(m);
         }
     } catch (const std::exception& e) {
@@ -485,30 +507,19 @@ bool OrderRepository::insertOutboxMessage(const OutboxMessage& outbox) {
 
 std::vector<Order> OrderRepository::getPendingLimitOrders(int limit) {
     std::vector<Order> orders;
+    if (limit <= 0) limit = 50;
     try {
         std::string sql = "SELECT order_id, user_id, symbol, side, order_type, quantity, "
                           "limit_price_paise, execution_price_paise, total_value_paise, "
                           "status, rejection_reason, reservation_id, idempotency_key, "
-                          "created_at, updated_at FROM orders WHERE status = 'PENDING' ORDER BY created_at ASC LIMIT ?";
-        auto f = getDbClient()->execSqlAsyncFuture(sql, limit);
+                          "COALESCE(DATE_FORMAT(created_at, '%Y-%m-%d %H:%i:%s'), '') AS created_at, "
+                          "COALESCE(DATE_FORMAT(updated_at, '%Y-%m-%d %H:%i:%s'), '') AS updated_at "
+                          "FROM orders WHERE status = 'PENDING' ORDER BY created_at ASC LIMIT " + std::to_string(limit);
+        auto f = getDbClient()->execSqlAsyncFuture(sql);
         auto result = f.get();
 
         for (const auto& row : result) {
-            Order o;
-            o.orderId = row["order_id"].as<std::string>();
-            o.userId = row["user_id"].as<std::string>();
-            o.symbol = row["symbol"].as<std::string>();
-            o.side = orderSideFromString(row["side"].as<std::string>());
-            o.type = orderTypeFromString(row["order_type"].as<std::string>());
-            o.quantity = row["quantity"].as<int>();
-            if (!row["limit_price_paise"].isNull() && row["limit_price_paise"].as<int64_t>() > 0) {
-                o.limitPricePaise = row["limit_price_paise"].as<int64_t>();
-            }
-            if (!row["reservation_id"].isNull()) {
-                o.reservationId = row["reservation_id"].as<std::string>();
-            }
-            o.status = OrderStatus::PENDING;
-            orders.push_back(o);
+            orders.push_back(parseOrderRow(row));
         }
     } catch (const std::exception& e) {
         LOG_ERROR << "Failed to get pending limit orders: " << e.what();

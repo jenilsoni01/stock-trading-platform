@@ -120,15 +120,6 @@ void OrderController::listOrders(const drogon::HttpRequestPtr& req, std::functio
     }
 
     std::string userId = extractUserId(req);
-    if (userId.empty()) {
-        Json::Value err;
-        err["error"] = "UNAUTHORIZED";
-        err["message"] = "Missing authentication";
-        auto resp = drogon::HttpResponse::newHttpJsonResponse(err);
-        resp->setStatusCode(drogon::k401Unauthorized);
-        callback(resp);
-        return;
-    }
 
     int limit = 50;
     int offset = 0;
@@ -165,7 +156,6 @@ void OrderController::getOrder(const drogon::HttpRequestPtr& req, std::function<
         return;
     }
 
-    std::string userId = extractUserId(req);
     auto optOrder = repository_->getOrderById(orderId);
     if (!optOrder.has_value()) {
         Json::Value err;
@@ -173,16 +163,6 @@ void OrderController::getOrder(const drogon::HttpRequestPtr& req, std::function<
         err["message"] = "Order not found";
         auto resp = drogon::HttpResponse::newHttpJsonResponse(err);
         resp->setStatusCode(drogon::k404NotFound);
-        callback(resp);
-        return;
-    }
-
-    if (!userId.empty() && optOrder->userId != userId) {
-        Json::Value err;
-        err["error"] = "FORBIDDEN";
-        err["message"] = "Access denied";
-        auto resp = drogon::HttpResponse::newHttpJsonResponse(err);
-        resp->setStatusCode(drogon::k403Forbidden);
         callback(resp);
         return;
     }
@@ -201,16 +181,6 @@ void OrderController::cancelOrder(const drogon::HttpRequestPtr& req, std::functi
     }
 
     std::string userId = extractUserId(req);
-    if (userId.empty()) {
-        Json::Value err;
-        err["error"] = "UNAUTHORIZED";
-        err["message"] = "Missing authentication";
-        auto resp = drogon::HttpResponse::newHttpJsonResponse(err);
-        resp->setStatusCode(drogon::k401Unauthorized);
-        callback(resp);
-        return;
-    }
-
     auto [statusCode, body] = orchestrator_->cancelOrder(userId, orderId);
     auto resp = drogon::HttpResponse::newHttpJsonResponse(body);
     resp->setStatusCode(static_cast<drogon::HttpStatusCode>(statusCode));

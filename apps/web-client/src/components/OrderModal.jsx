@@ -14,8 +14,63 @@ export function OrderModal({ stock, initialSide = 'BUY', onClose, onOrderComplet
   const [sharesOwned, setSharesOwned] = useState(0);
   const [loadingPosition, setLoadingPosition] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
+
+  // Auto-poll pending limit order while modal is open to transition automatically on fill
+  useEffect(() => {
+    const orderId = result?.order?.orderId || result?.orderId;
+    if (!result || result.order?.status !== 'PENDING' || !orderId) return;
+
+    let isMounted = true;
+    const pollPendingStatus = async () => {
+      try {
+        const updated = await api.getOrder(orderId);
+        if (isMounted && updated && updated.status === 'EXECUTED') {
+          setResult(prev => ({
+            ...prev,
+            order: updated,
+            trade: {
+              quantity: updated.quantity,
+              pricePaise: updated.executionPricePaise,
+              totalValuePaise: updated.totalValuePaise,
+            },
+            message: `Limit ${side} executed! Filled at ₹${(updated.executionPricePaise / 100).toFixed(2)}`,
+          }));
+          if (refreshWallet) await refreshWallet();
+          if (onOrderCompleted) onOrderCompleted(updated);
+        }
+      } catch (err) {
+        // silent polling catch
+      }
+    };
+
+    const interval = setInterval(pollPendingStatus, 1500);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [result, side, refreshWallet, onOrderCompleted]);
+
+  const handleCancelPending = async () => {
+    const orderId = result?.order?.orderId || result?.orderId;
+    if (!orderId) return;
+    setCancelling(true);
+    try {
+      await api.cancelOrder(orderId);
+      if (refreshWallet) await refreshWallet();
+      setResult(prev => ({
+        ...prev,
+        order: { ...prev.order, status: 'CANCELLED' },
+        message: 'Order cancelled. Reserved funds returned to wallet.',
+      }));
+    } catch (err) {
+      alert(`Could not cancel order: ${err.message}`);
+    } finally {
+      setCancelling(false);
+    }
+  };
 
   // Poll live quote for real-time price updates while modal is open
   useEffect(() => {
@@ -229,7 +284,32 @@ export function OrderModal({ stock, initialSide = 'BUY', onClose, onOrderComplet
         {/* Confirmation Screen */}
         {result ? (
           <div style={{ textAlign: 'center', padding: '16px 0' }}>
-            {result.order?.status === 'PENDING' ? (
+            {result.order?.status === 'CANCELLED' ? (
+              <>
+                <div style={{
+                  width: '56px',
+                  height: '56px',
+                  borderRadius: '50%',
+                  background: 'rgba(244, 63, 94, 0.15)',
+                  color: '#f43f5e',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  margin: '0 auto 14px auto',
+                }}>
+                  <X size={32} />
+                </div>
+                <h3 style={{ fontSize: '18px', fontWeight: 700, marginBottom: '6px' }}>
+                  Limit Order Cancelled
+                </h3>
+                <p style={{ color: 'var(--text-muted)', fontSize: '13px', marginBottom: '18px' }}>
+                  Your limit order has been cancelled and any reserved funds have been returned to your wallet.
+                </p>
+                <button onClick={onClose} className="btn btn-secondary" style={{ width: '100%', padding: '12px', fontSize: '14px' }}>
+                  Close
+                </button>
+              </>
+            ) : result.order?.status === 'PENDING' ? (
               <>
                 <div style={{
                   width: '56px',
@@ -264,7 +344,7 @@ export function OrderModal({ stock, initialSide = 'BUY', onClose, onOrderComplet
                   display: 'flex',
                   flexDirection: 'column',
                   gap: '10px',
-                  marginBottom: '20px',
+                  marginBottom: '16px',
                   border: '1px solid var(--border-color)',
                 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
@@ -284,14 +364,27 @@ export function OrderModal({ stock, initialSide = 'BUY', onClose, onOrderComplet
                     <span className="mono">₹{formatInr(livePricePaise)}</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid var(--border-color)', paddingTop: '8px' }}>
-                    <span style={{ color: 'var(--text-dim)' }}>Order Book Status:</span>
-                    <span className="badge badge-warning">PENDING (Awaiting Price)</span>
+                    <span style={{ color: 'var(--text-dim)' }}>Matching Engine:</span>
+                    <span className="badge badge-warning" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                      <span className="pulse-indicator" style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#fbbf24' }}></span>
+                      PENDING (Auto-checking ticks)
+                    </span>
                   </div>
                 </div>
 
-                <button onClick={onClose} className="btn btn-primary" style={{ width: '100%', padding: '12px', fontSize: '14px' }}>
-                  View in Orders History
-                </button>
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <button 
+                    onClick={handleCancelPending} 
+                    disabled={cancelling}
+                    className="btn btn-secondary" 
+                    style={{ flex: 1, padding: '12px', fontSize: '13px', color: '#f43f5e', borderColor: 'rgba(244, 63, 94, 0.3)' }}
+                  >
+                    {cancelling ? 'Cancelling...' : 'Cancel Order'}
+                  </button>
+                  <button onClick={onClose} className="btn btn-primary" style={{ flex: 1, padding: '12px', fontSize: '13px' }}>
+                    View Orders
+                  </button>
+                </div>
               </>
             ) : (
               <>

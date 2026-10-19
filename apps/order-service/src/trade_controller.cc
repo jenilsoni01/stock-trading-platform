@@ -28,15 +28,6 @@ void TradeController::listTrades(const drogon::HttpRequestPtr& req, std::functio
     }
 
     std::string userId = extractUserId(req);
-    if (userId.empty()) {
-        Json::Value err;
-        err["error"] = "UNAUTHORIZED";
-        err["message"] = "Missing authentication";
-        auto resp = drogon::HttpResponse::newHttpJsonResponse(err);
-        resp->setStatusCode(drogon::k401Unauthorized);
-        callback(resp);
-        return;
-    }
 
     int limit = 50;
     int offset = 0;

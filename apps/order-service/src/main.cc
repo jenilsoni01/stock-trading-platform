@@ -79,12 +79,12 @@ int main(int argc, char* argv[]) {
     OrderController::setDependencies(orchestrator, repo);
     TradeController::setDependencies(repo);
 
-    // Start background outbox polling relay once Drogon event loop is running
-    int pollInterval = 2000;
+    // Start background outbox polling and limit order matching relay
+    int pollInterval = 1500;
     if (const char* envInterval = std::getenv("OUTBOX_POLL_INTERVAL_MS")) {
         try { pollInterval = std::stoi(envInterval); } catch (...) {}
     }
-    auto outboxRelay = std::make_shared<OutboxRelay>(repo, pollInterval);
+    auto outboxRelay = std::make_shared<OutboxRelay>(repo, orchestrator, pollInterval);
     drogon::app().registerBeginningAdvice([outboxRelay]() {
         outboxRelay->start();
     });

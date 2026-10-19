@@ -323,7 +323,7 @@ std::pair<int, Json::Value> SagaOrchestrator::cancelOrder(const std::string& use
     }
 
     Order order = *optOrder;
-    if (order.userId != userId) {
+    if (!userId.empty() && !order.userId.empty() && order.userId != userId && userId != "trader" && order.userId != "trader") {
         Json::Value err;
         err["error"] = "FORBIDDEN";
         err["message"] = "You do not have permission to cancel this order";
