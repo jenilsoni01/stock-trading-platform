@@ -1,5 +1,6 @@
 #include "order_controller.h"
 #include <trantor/utils/Logger.h>
+#include <cmath>
 
 namespace stp::order {
 
