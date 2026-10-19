@@ -54,6 +54,7 @@ int main(int argc, char* argv[]) {
     drogon::app().createDbClient("mysql", dbHost, dbPort, dbName, dbUser, dbPass, 8, "", "default", false, "utf8mb4");
 
     auto repo = std::make_shared<OrderRepository>();
+    repo->initSchema();
 
     // Read upstream URLs
     std::string defaultServiceHost = (envInfraHost != nullptr && std::strlen(envInfraHost) > 0) ? envInfraHost : "localhost";

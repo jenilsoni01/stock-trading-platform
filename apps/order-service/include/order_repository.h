@@ -14,6 +14,9 @@ class OrderRepository {
 public:
     explicit OrderRepository(drogon::orm::DbClientPtr dbClient = nullptr);
 
+    // Initialize database schema (ensures tables exist)
+    void initSchema();
+
     // Order operations
     bool createOrder(const Order& order, const std::string& sagaStep, const OutboxMessage& outbox);
     std::optional<Order> getOrderById(const std::string& orderId);
