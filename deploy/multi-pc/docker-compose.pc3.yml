@@ -1,0 +1,73 @@
+# ==============================================================================
+# PC 3: Order Service (Harsh Thakkar - Windows)
+# Components:
+#   - Database: MySQL 8.0 (Port 3306)
+#   - Microservice: Order Matching & Saga Engine (C++ 17 / Drogon) (Port 8083)
+# ==============================================================================
+# Usage:
+#   docker compose -f deploy/multi-pc/docker-compose.pc3.yml up -d --build
+# ==============================================================================
+
+version: '3.8'
+
+services:
+  # === MySQL (Order Service Database) ===
+  mysql:
+    image: mysql:8.0.39
+    container_name: stp-pc3-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: dev_mysql_root_pass
+      MYSQL_DATABASE: order_service_db
+      MYSQL_USER: order_service
+      MYSQL_PASSWORD: dev_mysql_pass
+    ports:
+      - "3306:3306"
+    volumes:
+      - pc3_mysql_data:/var/lib/mysql
+      - ../../infra/databases/mysql/init.sql:/docker-entrypoint-initdb.d/01-init.sql
+    command: >
+      --default-authentication-plugin=mysql_native_password
+      --binlog-format=ROW
+      --binlog-row-image=FULL
+      --log-bin=mysql-bin
+      --server-id=1
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-pdev_mysql_root_pass"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - pc3-network
+
+  # === Order Service (C++ Drogon Engine) ===
+  order-service:
+    build:
+      context: ../../apps/order-service
+      dockerfile: Dockerfile
+    container_name: stp-pc3-order-service
+    ports:
+      - "8083:8083"
+    environment:
+      - DB_HOST=mysql
+      - DB_USER=order_service
+      - DB_PASSWORD=dev_mysql_pass
+      - DB_NAME=order_service_db
+      - WALLET_SERVICE_URL=http://${PC1_IP:-127.0.0.1}:8081
+      - MARKET_DATA_URL=http://${PC2_IP:-127.0.0.1}:8082
+      - PORTFOLIO_SERVICE_URL=http://${PC4_IP:-127.0.0.1}:8084
+      - NOTIFICATION_SERVICE_URL=http://${PC5_IP:-127.0.0.1}:8085
+      - KAFKA_BOOTSTRAP_SERVERS=${PC1_IP:-localhost}:9093
+    depends_on:
+      mysql:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - pc3-network
+
+volumes:
+  pc3_mysql_data:
+
+networks:
+  pc3-network:
+    name: stp-pc3-network

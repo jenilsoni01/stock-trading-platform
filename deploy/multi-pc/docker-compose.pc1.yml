@@ -1,0 +1,191 @@
+# ==============================================================================
+# PC 1: Host / Lead Machine (Jenil Soni - Windows)
+# Components:
+#   - Infrastructure: PostgreSQL (5432), Zookeeper (2181), Kafka (9092/9093)
+#   - Microservices: Eureka Discovery (8761), Identity & Wallet (8081),
+#                    API Gateway (8080), React Web Client (3000)
+# ==============================================================================
+# Usage:
+#   docker compose -f deploy/multi-pc/docker-compose.pc1.yml up -d --build
+# ==============================================================================
+
+version: '3.8'
+
+services:
+  # === PostgreSQL (Identity & Wallet Database) ===
+  postgres:
+    image: postgres:16.4-alpine
+    container_name: stp-pc1-postgres
+    environment:
+      POSTGRES_DB: identity_wallet_db
+      POSTGRES_USER: iw_service
+      POSTGRES_PASSWORD: dev_postgres_pass
+    ports:
+      - "5432:5432"
+    volumes:
+      - pc1_postgres_data:/var/lib/postgresql/data
+      - ../../infra/databases/postgres/init.sql:/docker-entrypoint-initdb.d/01-init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U iw_service -d identity_wallet_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - pc1-network
+
+  # === Zookeeper (for Kafka) ===
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.7.1
+    container_name: stp-pc1-zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
+    volumes:
+      - pc1_zookeeper_data:/var/lib/zookeeper/data
+    healthcheck:
+      test: ["CMD", "cub", "zk-ready", "localhost:2181", "5"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - pc1-network
+
+  # === Kafka (Distributed Event Broker for all 5 PCs) ===
+  kafka:
+    image: confluentinc/cp-kafka:7.7.1
+    container_name: stp-pc1-kafka
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    ports:
+      - "9092:9092"
+      - "9093:9093"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT,LAN:PLAINTEXT
+      KAFKA_LISTENERS: INTERNAL://0.0.0.0:29092,EXTERNAL://0.0.0.0:9092,LAN://0.0.0.0:9093
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:29092,EXTERNAL://localhost:9092,LAN://${PC1_IP:-localhost}:9093
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+    volumes:
+      - pc1_kafka_data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD", "cub", "kafka-ready", "-b", "localhost:29092", "1", "10"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 15s
+    restart: unless-stopped
+    networks:
+      - pc1-network
+
+  # === Kafka Topics Creator ===
+  kafka-init:
+    image: confluentinc/cp-kafka:7.7.1
+    container_name: stp-pc1-kafka-init
+    depends_on:
+      kafka:
+        condition: service_healthy
+    entrypoint: ["/bin/bash", "-c"]
+    command: |
+      "
+      kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic trades.executed --partitions 3 --replication-factor 1
+      kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic orders.created --partitions 3 --replication-factor 1
+      kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic orders.executed --partitions 3 --replication-factor 1
+      kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic orders.cancelled --partitions 3 --replication-factor 1
+      kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic orders.pending --partitions 3 --replication-factor 1
+      echo 'Kafka topics created successfully on PC1!'
+      "
+    networks:
+      - pc1-network
+
+  # === Eureka Service Discovery ===
+  eureka-server:
+    build:
+      context: ../../discovery
+      dockerfile: Dockerfile
+    container_name: stp-pc1-eureka
+    ports:
+      - "8761:8761"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+    restart: unless-stopped
+    networks:
+      - pc1-network
+
+  # === Identity & Wallet Service ===
+  identity-wallet-service:
+    build:
+      context: ../../apps/identity-wallet-service
+      dockerfile: Dockerfile
+    container_name: stp-pc1-identity-wallet
+    ports:
+      - "8081:8081"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/identity_wallet_db
+      - SPRING_DATASOURCE_USERNAME=iw_service
+      - SPRING_DATASOURCE_PASSWORD=dev_postgres_pass
+      - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://eureka-server:8761/eureka/
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+      - JWT_SECRET=${JWT_SECRET:-dev-jwt-secret-change-me-in-production-this-must-be-at-least-256-bits-long-for-hs256}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - pc1-network
+
+  # === API Gateway (Routes to local services + other 4 PCs over LAN) ===
+  api-gateway:
+    build:
+      context: ../../gateway
+      dockerfile: Dockerfile
+    container_name: stp-pc1-gateway
+    ports:
+      - "8080:8080"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - EUREKA_SERVER_URL=http://eureka-server:8761/eureka/
+      - IDENTITY_SERVICE_URL=http://identity-wallet-service:8081
+      - MARKET_DATA_SERVICE_URL=http://${PC2_IP:-127.0.0.1}:8082
+      - ORDER_SERVICE_URL=http://${PC3_IP:-127.0.0.1}:8083
+      - PORTFOLIO_SERVICE_URL=http://${PC4_IP:-127.0.0.1}:8084
+      - NOTIFICATION_SERVICE_URL=http://${PC5_IP:-127.0.0.1}:8085
+      - JWT_SECRET=${JWT_SECRET:-dev-jwt-secret-change-me-in-production-this-must-be-at-least-256-bits-long-for-hs256}
+    depends_on:
+      - identity-wallet-service
+    restart: unless-stopped
+    networks:
+      - pc1-network
+
+  # === Web Client (React Single Page Application) ===
+  web-client:
+    build:
+      context: ../../apps/web-client
+      dockerfile: Dockerfile
+    container_name: stp-pc1-web-client
+    ports:
+      - "3000:80"
+    depends_on:
+      - api-gateway
+    restart: unless-stopped
+    networks:
+      - pc1-network
+
+volumes:
+  pc1_postgres_data:
+  pc1_zookeeper_data:
+  pc1_kafka_data:
+
+networks:
+  pc1-network:
+    name: stp-pc1-network

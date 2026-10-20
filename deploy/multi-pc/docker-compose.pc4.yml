@@ -1,0 +1,63 @@
+# ==============================================================================
+# PC 4: Portfolio Service (Kevl Dholakiya - macOS)
+# Components:
+#   - Database: Redis 7.4 (Port 6379)
+#   - Microservice: Portfolio & Analytics CQRS Projection (Python 3.11 / FastAPI) (Port 8084)
+# ==============================================================================
+# Usage:
+#   docker compose -f deploy/multi-pc/docker-compose.pc4.yml up -d --build
+# ==============================================================================
+
+version: '3.8'
+
+services:
+  # === Redis (Portfolio Read-Model & Cache) ===
+  redis:
+    image: redis:7.4-alpine
+    container_name: stp-pc4-redis
+    command: >
+      redis-server 
+      --requirepass dev_redis_pass
+      --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - pc4_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "dev_redis_pass", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - pc4-network
+
+  # === Portfolio Service (Python FastAPI) ===
+  portfolio-service:
+    build:
+      context: ../../apps/portfolio-service
+      dockerfile: Dockerfile
+    container_name: stp-pc4-portfolio-service
+    ports:
+      - "8084:8084"
+    environment:
+      - PORT=8084
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=dev_redis_pass
+      - MARKET_DATA_URL=http://${PC2_IP:-127.0.0.1}:8082
+      - KAFKA_BOOTSTRAP_SERVERS=${PC1_IP:-localhost}:9093
+      - JWT_SECRET=${JWT_SECRET:-dev-jwt-secret-change-me-in-production-this-must-be-at-least-256-bits-long-for-hs256}
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - pc4-network
+
+volumes:
+  pc4_redis_data:
+
+networks:
+  pc4-network:
+    name: stp-pc4-network

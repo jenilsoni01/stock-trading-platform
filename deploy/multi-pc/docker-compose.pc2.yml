@@ -1,0 +1,64 @@
+# ==============================================================================
+# PC 2: Market Data Service (Jeel Dhamsaniya - macOS)
+# Components:
+#   - Database: MongoDB 7.0 (Port 27017)
+#   - Microservice: Market Data Service (Go 1.22 / Gin / gRPC) (Ports 8082, 50051)
+# ==============================================================================
+# Usage:
+#   docker compose -f deploy/multi-pc/docker-compose.pc2.yml up -d --build
+# ==============================================================================
+
+version: '3.8'
+
+services:
+  # === MongoDB (Market Data Database) ===
+  mongodb:
+    image: mongo:7.0.14
+    container_name: stp-pc2-mongodb
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: md_service
+      MONGO_INITDB_ROOT_PASSWORD: dev_mongo_pass
+      MONGO_INITDB_DATABASE: market_data_db
+    ports:
+      - "27017:27017"
+    volumes:
+      - pc2_mongodb_data:/data/db
+      - ../../infra/databases/mongodb/init.js:/docker-entrypoint-initdb.d/01-init.js
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')", "-u", "md_service", "-p", "dev_mongo_pass"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - pc2-network
+
+  # === Market Data Service (Go / Gin Engine & Stock Simulator) ===
+  market-data-service:
+    build:
+      context: ../../apps/market-data-service
+      dockerfile: Dockerfile
+    container_name: stp-pc2-market-data
+    ports:
+      - "8082:8082"
+      - "50051:50051"
+    environment:
+      - PORT=8082
+      - GRPC_PORT=50051
+      - MONGODB_URI=mongodb://md_service:dev_mongo_pass@mongodb:27017/market_data_db?authSource=admin
+      - SIMULATOR_INTERVAL_SECONDS=2
+      - SIMULATOR_MAX_CHANGE_PERCENT=1.5
+      - SIMULATOR_SEED=42
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - pc2-network
+
+volumes:
+  pc2_mongodb_data:
+
+networks:
+  pc2-network:
+    name: stp-pc2-network
