@@ -20,38 +20,69 @@ This guide details how the 5 team members run, test, and integrate their assigne
 
 ```mermaid
 flowchart TD
-    subgraph HostPC ["Host Machine (Jenil - Windows PC)"]
-        Infra["Docker Compose Infrastructure<br/>• PostgreSQL (5432) • MySQL (3306) • MongoDB (27017)<br/>• Redis (6379) • Kafka (9092/9093) • Firestore (8088)"]
+    subgraph HostPC ["PC 1: Host Machine (Jenil - Windows PC)"]
+        Infra["Shared Infrastructure<br/>• PostgreSQL (5432) • Kafka Broker (9092/9093)<br/>• Zookeeper (2181)"]
         Gateway["API Gateway (Port 8080)"]
         Eureka["Eureka Server (Port 8761)"]
         Identity["Identity & Wallet Service (Port 8081)"]
+        WebClient["React Trading Terminal (Port 3000)"]
     end
 
-    subgraph DevPC1 ["Dev Machine 2 (Jeel - macOS)"]
-        MarketSvc["Market Data Service (Go)<br/>Connects to Mongo at LAN_IP:27017"]
+    subgraph DevPC1 ["PC 2: Market Data (Jeel - macOS)"]
+        MarketSvc["Market Data Service (Go / Gin)<br/>Ports 8082, 50051"]
+        MongoDB[("MongoDB 7.0 (27017)")]
+        MarketSvc --- MongoDB
     end
 
-    subgraph DevPC2 ["Dev Machine 3 (Harsh - Windows)"]
-        OrderSvc["Order Service (C++ Docker)<br/>Connects to MySQL & Market Data"]
+    subgraph DevPC2 ["PC 3: Order Engine (Harsh - Windows)"]
+        OrderSvc["Order Service (C++ 17 / Drogon)<br/>Port 8083"]
+        MySQL[("MySQL 8.0 (3306)")]
+        OrderSvc --- MySQL
     end
 
-    subgraph DevPC3 ["Dev Machine 4 (Kevl - macOS)"]
-        PortfolioSvc["Portfolio Service (Python .venv)<br/>Consumes Kafka at LAN_IP:9093"]
+    subgraph DevPC3 ["PC 4: Portfolio CQRS (Kevl - macOS)"]
+        PortfolioSvc["Portfolio Service (Python 3.11 / FastAPI)<br/>Port 8084"]
+        Redis[("Redis 7.4 (6379)")]
+        PortfolioSvc --- Redis
     end
 
-    subgraph DevPC4 ["Dev Machine 5 (Krish - Windows)"]
-        NotificationSvc["Notification Service (Node.js)<br/>Consumes Kafka at LAN_IP:9093"]
+    subgraph DevPC4 ["PC 5: Notifications (Krish - Windows)"]
+        NotificationSvc["Notification Service (Node.js 20)<br/>Port 8085"]
+        Firestore[("Firestore Emulator (8088)")]
+        NotificationSvc --- Firestore
     end
 
-    DevPC1 -->|LAN IP| Infra
-    DevPC2 -->|LAN IP| Infra
-    DevPC3 -->|LAN IP| Infra
-    DevPC4 -->|LAN IP| Infra
+    %% Gateway to each microservice
+    Gateway -->|Localhost:8081| Identity
+    Gateway -->|PC2_IP:8082| MarketSvc
+    Gateway -->|PC3_IP:8083| OrderSvc
+    Gateway -->|PC4_IP:8084| PortfolioSvc
+    Gateway -->|PC5_IP:8085| NotificationSvc
+
+    %% Inter-service dependencies
+    OrderSvc -->|PC1_IP:8081| Identity
+    OrderSvc -->|PC2_IP:8082| MarketSvc
+    OrderSvc -->|PC4_IP:8084| PortfolioSvc
+    OrderSvc -->|PC5_IP:8085| NotificationSvc
+    OrderSvc ==>|PC1_IP:9093| Infra
+
+    PortfolioSvc -->|PC2_IP:8082| MarketSvc
+    PortfolioSvc ==>|PC1_IP:9093| Infra
+    NotificationSvc ==>|PC1_IP:9093| Infra
 ```
 
 ---
 
-## ⚙️ Multi-PC Configuration Steps
+## ⚡ Zero-Toolchain Docker Compose Multi-PC Deployment (Recommended)
+
+Each machine runs its assigned service and database inside Docker. See the dedicated guides in [`docs/multi-pc/`](multi-pc/README.md):
+- **PC 1**: `docker compose -f deploy/multi-pc/docker-compose.pc1.yml up -d --build` ([PC 1 Guide](multi-pc/PC1_JENIL_GATEWAY.md))
+- **PC 2**: `docker compose -f deploy/multi-pc/docker-compose.pc2.yml up -d --build` ([PC 2 Guide](multi-pc/PC2_JEEL_MARKET_DATA.md))
+- **PC 3**: `docker compose -f deploy/multi-pc/docker-compose.pc3.yml up -d --build` ([PC 3 Guide](multi-pc/PC3_HARSH_ORDER_SERVICE.md))
+- **PC 4**: `docker compose -f deploy/multi-pc/docker-compose.pc4.yml up -d --build` ([PC 4 Guide](multi-pc/PC4_KEVL_PORTFOLIO_SERVICE.md))
+- **PC 5**: `docker compose -f deploy/multi-pc/docker-compose.pc5.yml up -d --build` ([PC 5 Guide](multi-pc/PC5_KRISH_NOTIFICATION_SERVICE.md))
+
+---
 
 ### 1. Host Machine (Shared Infrastructure Provider)
 1. Find your machine's LAN IP:

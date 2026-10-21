@@ -74,10 +74,12 @@ flowchart TD
     Portfolio --- Redis
     Notification --- Firestore
 
-    Order -.->|gRPC Quote Lookup| Market
-    Order -.->|REST Pessimistic Reserve| Identity
+    Order -.->|REST / gRPC Quote Lookup| Market
+    Order -.->|REST Pessimistic Reserve & Capture| Identity
+    Order -.->|Immediate Projection Dispatch| Portfolio
+    Order -.->|Immediate Alert Dispatch| Notification
 
-    Order ==>|Transactional Outbox| Kafka
+    Order ==>|Transactional Outbox Relay| Kafka
     Identity -.-> Kafka
     Market -.-> Kafka
     Kafka ==>|Consume trades.executed| Portfolio

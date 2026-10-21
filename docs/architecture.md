@@ -10,7 +10,7 @@ The Stock Trading Platform is a **simulated paper-trading application** built as
 
 ```mermaid
 flowchart TD
-    Client["🌐 Web Client (React)<br/>http://localhost:3001"]
+    Client["🌐 Web Client (React / Vite)<br/>http://localhost:3000 (or LAN IP)"]
     
     subgraph GatewayLayer ["API Gateway & Security Boundary"]
         Gateway["🚪 API Gateway (Spring Cloud Gateway)<br/>http://localhost:8080<br/>• JWT Validation • Rate Limiting • CORS • Correlation IDs"]
@@ -49,10 +49,12 @@ flowchart TD
     Portfolio --- Redis
     Notification --- Firestore
 
-    Order -.->|gRPC Quote Lookup| Market
-    Order -.->|REST Pessimistic Reserve| Identity
+    Order -.->|REST / gRPC Quote Lookup| Market
+    Order -.->|REST Pessimistic Reserve & Capture| Identity
+    Order -.->|Immediate Projection Dispatch| Portfolio
+    Order -.->|Immediate Alert Dispatch| Notification
 
-    Order ==>|Transactional Outbox| Kafka
+    Order ==>|Transactional Outbox Relay| Kafka
     Identity -.-> Kafka
     Market -.-> Kafka
     Kafka ==>|Consume trades.executed| Portfolio
