@@ -71,7 +71,7 @@ New-NetFirewallRule -DisplayName "STP Platform Dev Ports" -Direction Inbound -Lo
 ### Step 4: Start PC 1 Stack
 Run:
 ```powershell
-docker compose -f deploy/multi-pc/docker-compose.pc1.yml up -d --build
+docker compose --env-file .env -f deploy/multi-pc/docker-compose.pc1.yml up -d --build
 ```
 
 ### Step 5: Verify That Everything is Healthy
@@ -82,7 +82,7 @@ docker ps
 You should see 8 containers running (`stp-pc1-web-client`, `stp-pc1-gateway`, `stp-pc1-identity-wallet`, `stp-pc1-eureka`, `stp-pc1-kafka`, `stp-pc1-zookeeper`, `stp-pc1-postgres`).
 
 Verify the services in your browser:
-- **Trading Web Application**: `http://localhost:3000` or `http://192.168.1.101:3000`
+- **Trading Web Application**: `http://localhost:3000` or `http://10.43.5.202:3000`
 - **API Gateway Health**: `http://localhost:8080/actuator/health`
 - **Eureka Dashboard**: `http://localhost:8761`
 - **Identity Service**: `http://localhost:8081/actuator/health`
@@ -92,9 +92,9 @@ Verify the services in your browser:
 ## 🛑 How to Stop or Restart
 To stop:
 ```powershell
-docker compose -f deploy/multi-pc/docker-compose.pc1.yml down
+docker compose --env-file .env -f deploy/multi-pc/docker-compose.pc1.yml down
 ```
 To view logs:
 ```powershell
-docker compose -f deploy/multi-pc/docker-compose.pc1.yml logs -f api-gateway
+docker compose --env-file .env -f deploy/multi-pc/docker-compose.pc1.yml logs -f api-gateway
 ```
