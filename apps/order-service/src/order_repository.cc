@@ -10,11 +10,7 @@ static inline std::string safeDate(const drogon::orm::Row& row, const char* col)
     try {
         return row[col].as<std::string>();
     } catch (...) {
-        try {
-            return row[col].as<trantor::Date>().toCustomedFormattedString("%Y-%m-%d %H:%M:%S");
-        } catch (...) {
-            return "";
-        }
+        return "";
     }
 }
 
