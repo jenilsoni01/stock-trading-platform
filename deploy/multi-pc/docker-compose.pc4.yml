@@ -45,8 +45,8 @@ services:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - REDIS_PASSWORD=dev_redis_pass
-      - MARKET_DATA_URL=http://${PC2_IP:-127.0.0.1}:8082
-      - KAFKA_BOOTSTRAP_SERVERS=${PC1_IP:-localhost}:9093
+      - MARKET_DATA_URL=http://${PC2_IP:?Error: PC2_IP must be set in .env}:8082
+      - KAFKA_BOOTSTRAP_SERVERS=${PC1_IP:?Error: PC1_IP must be set in .env}:9093
       - JWT_SECRET=${JWT_SECRET:-dev-jwt-secret-change-me-in-production-this-must-be-at-least-256-bits-long-for-hs256}
     depends_on:
       redis:

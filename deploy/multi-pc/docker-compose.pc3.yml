@@ -53,11 +53,11 @@ services:
       - DB_USER=order_service
       - DB_PASSWORD=dev_mysql_pass
       - DB_NAME=order_service_db
-      - WALLET_SERVICE_URL=http://${PC1_IP:-127.0.0.1}:8081
-      - MARKET_DATA_URL=http://${PC2_IP:-127.0.0.1}:8082
-      - PORTFOLIO_SERVICE_URL=http://${PC4_IP:-127.0.0.1}:8084
-      - NOTIFICATION_SERVICE_URL=http://${PC5_IP:-127.0.0.1}:8085
-      - KAFKA_BOOTSTRAP_SERVERS=${PC1_IP:-localhost}:9093
+      - WALLET_SERVICE_URL=http://${PC1_IP:?Error: PC1_IP must be set in .env}:8081
+      - MARKET_DATA_URL=http://${PC2_IP:?Error: PC2_IP must be set in .env}:8082
+      - PORTFOLIO_SERVICE_URL=http://${PC4_IP:?Error: PC4_IP must be set in .env}:8084
+      - NOTIFICATION_SERVICE_URL=http://${PC5_IP:?Error: PC5_IP must be set in .env}:8085
+      - KAFKA_BOOTSTRAP_SERVERS=${PC1_IP:?Error: PC1_IP must be set in .env}:9093
     depends_on:
       mysql:
         condition: service_healthy
