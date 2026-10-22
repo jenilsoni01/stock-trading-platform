@@ -44,7 +44,7 @@ cd stock-trading-platform
 ### Step 3: Start PC 2 Stack
 Run directly with Docker (no Go or MongoDB installation required):
 ```bash
-docker compose -f deploy/multi-pc/docker-compose.pc2.yml up -d --build
+docker compose --env-file .env -f deploy/multi-pc/docker-compose.pc2.yml up -d --build
 ```
 
 ### Step 4: Verify That Everything is Running
@@ -67,9 +67,9 @@ You should receive a JSON array containing stock symbols (`RELIANCE`, `TCS`, `IN
 ## 🛑 How to Stop or Restart
 To stop:
 ```bash
-docker compose -f deploy/multi-pc/docker-compose.pc2.yml down
+docker compose --env-file .env -f deploy/multi-pc/docker-compose.pc2.yml down
 ```
 To view live price ticker simulation logs:
 ```bash
-docker compose -f deploy/multi-pc/docker-compose.pc2.yml logs -f market-data-service
+docker compose --env-file .env -f deploy/multi-pc/docker-compose.pc2.yml logs -f market-data-service
 ```

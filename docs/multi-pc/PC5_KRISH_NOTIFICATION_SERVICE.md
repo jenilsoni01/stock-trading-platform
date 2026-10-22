@@ -55,7 +55,7 @@ PC5_IP=192.168.1.105      # YOUR IP
 ### Step 3: Start PC 5 Stack
 Run directly with Docker (no Node.js, npm, or gcloud CLI needed on host):
 ```powershell
-docker compose -f deploy/multi-pc/docker-compose.pc5.yml up -d --build
+docker compose --env-file .env -f deploy/multi-pc/docker-compose.pc5.yml up -d --build
 ```
 
 ### Step 4: Verify That Everything is Running
@@ -78,7 +78,7 @@ curl http://localhost:8085/health
 ## 🛑 How to Stop or Restart
 To stop:
 ```powershell
-docker compose -f deploy/multi-pc/docker-compose.pc5.yml down
+docker compose --env-file .env -f deploy/multi-pc/docker-compose.pc5.yml down
 ```
 To view live notification consumption logs:
 ```powershell

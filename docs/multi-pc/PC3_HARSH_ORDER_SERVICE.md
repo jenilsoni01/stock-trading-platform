@@ -63,7 +63,7 @@ PC5_IP=192.168.1.105      # Krish's IP (Notification)
 ### Step 3: Start PC 3 Stack
 Run with Docker (no C++ compiler, CMake, or MySQL needed on host):
 ```powershell
-docker compose -f deploy/multi-pc/docker-compose.pc3.yml up -d --build
+docker compose --env-file .env -f deploy/multi-pc/docker-compose.pc3.yml up -d --build
 ```
 
 ### Step 4: Verify That Everything is Running
@@ -92,9 +92,9 @@ curl http://localhost:8083/api/v1/orders
 ## 🛑 How to Stop or Restart
 To stop:
 ```powershell
-docker compose -f deploy/multi-pc/docker-compose.pc3.yml down
+docker compose --env-file .env -f deploy/multi-pc/docker-compose.pc3.yml down
 ```
 To view live matching engine and saga execution logs:
 ```powershell
-docker compose -f deploy/multi-pc/docker-compose.pc3.yml logs -f order-service
+docker compose --env-file .env -f deploy/multi-pc/docker-compose.pc3.yml logs -f order-service
 ```

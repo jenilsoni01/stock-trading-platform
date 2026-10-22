@@ -58,7 +58,7 @@ PC5_IP=192.168.1.105      # Krish's IP
 ### Step 3: Start PC 4 Stack
 Run directly with Docker (no Python, pip, or Redis needed on host):
 ```bash
-docker compose -f deploy/multi-pc/docker-compose.pc4.yml up -d --build
+docker compose --env-file .env -f deploy/multi-pc/docker-compose.pc4.yml up -d --build
 ```
 
 ### Step 4: Verify That Everything is Running
@@ -81,7 +81,7 @@ curl http://localhost:8084/health
 ## 🛑 How to Stop or Restart
 To stop:
 ```bash
-docker compose -f deploy/multi-pc/docker-compose.pc4.yml down
+docker compose --env-file .env -f deploy/multi-pc/docker-compose.pc4.yml down
 ```
 To view live CQRS projection and Kafka event consumer logs:
 ```bash
