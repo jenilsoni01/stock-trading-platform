@@ -43,7 +43,7 @@ services:
       - PORT=8085
       - FIRESTORE_EMULATOR_HOST=firestore-emulator:8088
       - FIRESTORE_PROJECT_ID=stp-local
-      - KAFKA_BOOTSTRAP_SERVERS=${PC1_IP:?Error: PC1_IP must be set in .env}:9093
+      - "KAFKA_BOOTSTRAP_SERVERS=${PC1_IP:?PC1_IP_must_be_set_in_env}:9093"
       - JWT_SECRET=${JWT_SECRET:-dev-jwt-secret-change-me-in-production-this-must-be-at-least-256-bits-long-for-hs256}
     depends_on:
       firestore-emulator:
