@@ -9,8 +9,6 @@
 #   docker compose -f deploy/multi-pc/docker-compose.pc1.yml up -d --build
 # ==============================================================================
 
-version: '3.8'
-
 services:
   # === PostgreSQL (Identity & Wallet Database) ===
   postgres:
@@ -109,6 +107,7 @@ services:
 
   # === Eureka Service Discovery ===
   eureka-server:
+    platform: linux/amd64
     build:
       context: ../../discovery
       dockerfile: Dockerfile
@@ -123,6 +122,7 @@ services:
 
   # === Identity & Wallet Service ===
   identity-wallet-service:
+    platform: linux/amd64
     build:
       context: ../../apps/identity-wallet-service
       dockerfile: Dockerfile
@@ -146,6 +146,7 @@ services:
 
   # === API Gateway (Routes to local services + other 4 PCs over LAN) ===
   api-gateway:
+    platform: linux/amd64
     build:
       context: ../../gateway
       dockerfile: Dockerfile

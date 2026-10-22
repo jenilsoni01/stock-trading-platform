@@ -6,6 +6,7 @@
 services:
   # === Discovery Service (Eureka) ===
   eureka-server:
+    platform: linux/amd64
     build:
       context: ../../discovery
       dockerfile: Dockerfile
@@ -20,6 +21,7 @@ services:
 
   # === Identity & Wallet Service ===
   identity-wallet-service:
+    platform: linux/amd64
     build:
       context: ../../apps/identity-wallet-service
       dockerfile: Dockerfile
@@ -135,6 +137,7 @@ services:
 
   # === API Gateway ===
   api-gateway:
+    platform: linux/amd64
     build:
       context: ../../gateway
       dockerfile: Dockerfile
